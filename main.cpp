@@ -18,20 +18,24 @@ struct String {
     s64 length;
 };
 
-s64 strlen(const char *c_string) {
+s64 strlen(u8 *c_string) {
     if (!c_string) return 0;
     
-    const char *s = c_string;
+    u8 *s = c_string;
     while (*s) ++s;
     
     return s - c_string;
 }
 
-String temp_string(const char *c_string) {
+String temp_string(u8 *c_string) {
     String s;
-    s.data = const_cast<char *>(c_string);
+    s.data = c_string;
     s.length = strlen(c_string);
     return s;
+}
+
+String temp_string(char *c_string) {
+    return temp_string(reinterpret_cast<u8 *>(c_string));
 }
 
 #define VGA_COLOR(fg, bg) (((fg) | ((bg) << 4)) << 8)
@@ -69,7 +73,7 @@ struct Vga {
 void Vga::write(String s) {
     for (s64 i = 0; i < s.length; ++i) {
         // @TODO handle end-of-buffer
-        buffer[cursor_pos] = color | s[i];
+        buffer[cursor_pos] = color | s.data[i];
         
         cursor_pos++;
     }
@@ -79,5 +83,5 @@ void Vga::write(String s) {
 extern "C"
 void kernel_main() {
     Vga vga;
-    vga.write(temp_string("Hi")));
+    vga.write(temp_string("Hi"));
 }
