@@ -30,3 +30,8 @@ _start:
 .hang: hlt
 	jmp .hang
 .end:
+
+
+_port_io_write_u32:
+
+	ret
