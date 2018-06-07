@@ -23,7 +23,9 @@ section .text
 global _start:function (_start.end - _start)
 
 _start:
+	cli
 	mov esp, stack_top
+	push ebx
 	extern kernel_main
 	call kernel_main
 	cli
@@ -32,6 +34,24 @@ _start:
 .end:
 
 
-_port_io_write_u32:
+global _port_io_read_u8
+global _port_io_write_u8
 
+global _port_io_write_u32
+
+_port_io_write_u32:
+	mov dx, [esp+4]
+	mov eax, [esp+8]
+	out dx, eax
+	ret
+
+_port_io_write_u8:
+	mov dx, [esp+4]
+	mov al, [esp+8]
+	out dx, al
+	ret
+
+_port_io_read_u8:
+	mov dx, [esp+4]
+	in al, dx
 	ret
