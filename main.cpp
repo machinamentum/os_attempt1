@@ -1,4 +1,8 @@
 #include <stdint.h>
+#include <stdarg.h>
+
+#define ALIGN(x) __attribute__((aligned(x)))
+
 
 typedef int64_t s64;
 typedef int32_t s32;
@@ -19,7 +23,8 @@ struct Multiboot_Information {
     u32 mem_upper;
     u32 boot_device;
     u32 cmdline;
-
+    u32 mods_count;
+    void *mods_addr;
 };
 
 extern "C"
@@ -54,6 +59,10 @@ String temp_string(char *data, u64 length) {
 String temp_string(char *c_string) {
     return temp_string(c_string, strlen(c_string));
 }
+
+#define S(str) (temp_string((str)))
+
+void kprint(String s, ...);
 
 #define VGA_WIDTH 80
 #define VGA_HEGIHT 25
@@ -92,18 +101,14 @@ struct Vga {
     void write_u32(u32 value);
     void write(u8 c);
     void print(String fmt, ...);
+    void print_valist(String fmt, va_list a_list);
     void clear_screen();
 
     void enable_cursor(bool enable);
     void set_cursor_coordinates(u16 x, u16 y);
 };
 
-#include <stdarg.h>
-
-void Vga::print(String fmt, ...) {
-    va_list a_list;
-    va_start(a_list, fmt);
-
+void Vga::print_valist(String fmt, va_list a_list) {
     for (s64 i = 0; i < fmt.length; ++i) {
         u8 c = fmt.data[i];
 
@@ -125,7 +130,12 @@ void Vga::print(String fmt, ...) {
             write(c);
         }
     }
+}
 
+void Vga::print(String fmt, ...) {
+    va_list a_list;
+    va_start(a_list, fmt);
+    print_valist(fmt, a_list);
     va_end(a_list);
 }
 
@@ -205,12 +215,118 @@ void Vga::set_cursor_coordinates(u16 x, u16 y) {
     _port_io_write_u8(0x3D5, (pos >> 8) & 0xFF);
 }
 
+// this manages the initial 128MB or so worth of pages
+// then we can find pages for use for other memory allocations
+// including more pages for bitmaps for further pages
+u32 initial_memory_use_bitmap[1024] ALIGN(4096);
+u32 upper_memory_size; // set in kernel_main
+
+u32 page_allocator_init() {
+    for (int i = 0; i < 1024; ++i) {
+        initial_memory_use_bitmap[i] = 0; 
+    }
+
+
+}
+
+#define PAGE_PRESENT           (1 << 0)
+#define PAGE_READ_WRITE        (1 << 1)
+#define PAGE_IS_NOT_PRIVILEGED (1 << 2) // 1; page is accesable to user land, otherwise only the kernel has access
+#define PAGE_USE_WRITE_THROUGH (1 << 3) // 1; write-through caching, otherwise write-back
+#define PAGE_DO_NOT_CACHE      (1 << 4)
+#define PAGE_HAS_BEEN_ACCESSD  (1 << 5)
+#define PAGE_IS_DIRTY          (1 << 6)
+#define PAGE_SIZE_4MiB         (1 << 7) // 1; page size 4MiB, otherwise page size 4KiB 
+#define PAGE_GLOBAL_BIT        (1 << 8)
+
+u32 page_directory[1024] ALIGN(4096);
+u32 first_page_table[1024] ALIGN(4096);
+
+void init_page_table_directory() {
+    for (int i = 0; i < 1024; ++i) {
+        page_directory[i] = 0x00000002;
+    }
+
+    for (int i = 0; i < 1024; ++i) {
+        first_page_table[i] = (i * 0x1000) | PAGE_PRESENT | PAGE_READ_WRITE;
+    }
+
+    page_directory[0] = ((u32) first_page_table) | PAGE_PRESENT | PAGE_READ_WRITE;
+
+    // map last page to the PDE
+    page_directory[1023] = ((u32) page_directory) | PAGE_PRESENT | PAGE_READ_WRITE;
+}
+
+extern "C"
+void load_page_directory(u32 *page_directory);
+extern "C"
+void enable_paging();
+extern "C"
+void flush_tlb();
+extern "C"
+void invalidate_page_i486(u32 page);
+
+void invalidate_page(u32 page) {
+    // @TODO maybe
+    // if (supports_invlpg(cpu)) {
+       invalidate_page_i486(page);
+    // } else {
+    //     flush_tlb();
+    // }
+}
+
+u32 virtual_to_physical_address(u32 virtual_addr) {
+    u32 dir_index = virtual_addr >> 22;
+    u32 table_index = (virtual_addr >> 12) & 0x03FF;
+
+    u32 *pd = (u32 *) 0xFFFFF000;
+    u32 *pt = ((u32 *) 0xFFC00000) + (0x400 * dir_index);
+
+    if (!(pd[dir_index] & PAGE_PRESENT)) return 0;
+    if (!(pt[table_index] & PAGE_PRESENT)) return 0;
+
+    return (pt[table_index] & ~0xFFF) + (virtual_addr & 0xFFF);
+}
+
+void map_page(u32 physical, u32 virtual_addr, u32 flags) {
+    u32 dir_index = virtual_addr >> 22;
+    u32 table_index = (virtual_addr >> 12) & 0x03FF;
+
+    u32 *pd = (u32 *) 0xFFFFF000;
+    u32 *pt = ((u32 *) 0xFFC00000) + (0x400 * dir_index);
+
+    if (!(pd[dir_index] & PAGE_PRESENT)) {
+
+    }
+
+    pt[table_index] = (physical | (flags & 0xFFF)) | PAGE_PRESENT;
+
+    invalidate_page(virtual_addr & ~0xFFF);
+}
+
+Vga vga;
+
+void kprint(String s, ...) {
+    va_list a_list;
+    va_start(a_list, s);
+    vga.print_valist(s, a_list);
+    va_end(a_list);
+}
+
 extern "C"
 void kernel_main(Multiboot_Information *info) {
-    Vga vga;
+    upper_memory_size = info->mem_upper;
+    vga = Vga();
+
+    init_page_table_directory();
+    load_page_directory(&page_directory[0]);
+    enable_paging();
+
+    // map_page((u32) VGA_ADDRESS, 0x34000000);
+
     vga.enable_cursor(true);
     vga.clear_screen();
-    vga.print(temp_string("Hello, Sailor!\n"));
-    vga.print(temp_string("mem_lower: %u\n"), info->mem_lower);
-    vga.print(temp_string("mem_upper: %u\n"), info->mem_upper);
+    kprint(S("Hello, Sailor!\n"));
+    kprint(S("mem_lower: %u\n"), info->mem_lower);
+    kprint(S("mem_upper: %u\n"), info->mem_upper);
 }

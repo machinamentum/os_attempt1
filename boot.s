@@ -33,6 +33,30 @@ _start:
 	jmp .hang
 .end:
 
+global invalidate_page_i486
+invalidate_page_i486:
+	mov eax, [esp+4]
+	invlpg [eax]
+	ret
+
+global flush_tlb
+flush_tlb:
+	mov eax, cr3
+	mov cr3, eax
+	ret
+
+global load_page_directory
+load_page_directory:
+	mov eax, [esp+4]
+	mov cr3, eax
+	ret
+
+global enable_paging
+enable_paging:
+	mov eax, cr0
+	or eax, 0x80000000
+	mov cr0, eax
+	ret
 
 global _port_io_read_u8
 global _port_io_write_u8
