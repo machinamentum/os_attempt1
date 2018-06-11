@@ -2,6 +2,7 @@
 #include <stdarg.h>
 
 #define ALIGN(x) __attribute__((aligned(x)))
+#define PACKED   __attribute__((packed))
 
 #define PAGE_SIZE 0x1000
 
@@ -18,6 +19,21 @@ typedef uint8_t  u8;
 typedef float float32;
 typedef double float64;
 
+struct Multiboot_Mmap {
+    u32 size;
+    u64 base_addr;
+    u64 length;
+
+    enum {
+        MEMORY_AVAILABLE = 1,
+        MEMORY_RESERVED = 2,
+        MEMORY_ACPI_RECLAIMABLE = 3,
+        MEMORY_NVS = 4,
+        MEMORY_BADRAM = 5,
+    };
+    u32 type;
+} PACKED;
+
 struct Multiboot_Information {
     u32 flags;
     u32 mem_lower;
@@ -25,7 +41,14 @@ struct Multiboot_Information {
     u32 boot_device;
     u32 cmdline;
     u32 mods_count;
-    void *mods_addr;
+    u32 mods_addr;
+    u8 syms[12];
+    u32 mmap_length;
+    u32 mmap_addr;
+    u32 drives_length;
+    u32 drives_addr;
+    u32 config_table;
+    u32 boot_loader_name;
 };
 
 extern "C"
@@ -68,12 +91,21 @@ String temp_string(char *c_string) {
     return temp_string(c_string, strlen(c_string));
 }
 
+void memcpy(void *dst, void *src, u32 num) {
+    u8 *_dst = reinterpret_cast<u8 *>(dst);
+    u8 *_src = reinterpret_cast<u8 *>(src);
+
+    for (u32 i = 0; i < num; ++i) {
+        _dst[i] = _src[i];
+    }
+}
+
 #define S(str) (temp_string((str)))
 
 void kprint(String s, ...);
 
 #define VGA_WIDTH 80
-#define VGA_HEGIHT 25
+#define VGA_HEGIHT 24
 #define VGA_COLOR(fg, bg) (((fg) | ((bg) << 4)) << 8)
 #define VGA_BLINK_FLAG ((1 << 8) << 8)
 
@@ -114,7 +146,29 @@ struct Vga {
     
     void enable_cursor(bool enable);
     void set_cursor_coordinates(u16 x, u16 y);
+    void scroll_one_line();
 };
+
+void Vga::scroll_one_line() {
+    u16 value = VGA_COLOR(Color::WHITE, Color::BLACK);
+    for (s32 i = 1; i < VGA_HEGIHT; ++i) {
+        for (u64 x = 0; x < VGA_WIDTH; ++x) {
+            u64 index = x + VGA_WIDTH * (i-1);
+            buffer[index] = value;
+        }
+        u16 *dst = &buffer[((i-1) * VGA_WIDTH)];
+        u16 *src = &buffer[(i * VGA_WIDTH)];
+        memcpy(dst, src, sizeof(u16) * VGA_WIDTH);
+    }
+
+    for (u64 x = 0; x < VGA_WIDTH; ++x) {
+        u64 index = x + VGA_WIDTH * (VGA_HEGIHT-1);
+        buffer[index] = value;
+    }
+
+    buffer_cursor_pos_x = 0;
+    buffer_cursor_pos_y--;
+}
 
 void Vga::print_valist(String fmt, va_list a_list) {
     for (s64 i = 0; i < fmt.length; ++i) {
@@ -163,8 +217,10 @@ void Vga::write(u8 c) {
     if (c == '\n') {
         buffer_cursor_pos_x = 0;
         buffer_cursor_pos_y++;
-        // @FixMe handle end of height!
         
+        if (buffer_cursor_pos_y >= VGA_HEGIHT) {
+            scroll_one_line();
+        }
         return;
     }
     u64 index = buffer_cursor_pos_x + VGA_WIDTH * buffer_cursor_pos_y;
@@ -175,7 +231,10 @@ void Vga::write(u8 c) {
     if (buffer_cursor_pos_x >= VGA_WIDTH) {
         buffer_cursor_pos_x = 0;
         buffer_cursor_pos_y++;
-        // @FixMe handle end of height!
+        
+        if (buffer_cursor_pos_y >= VGA_HEGIHT) {
+            scroll_one_line();
+        }
     }
     
     set_cursor_coordinates(buffer_cursor_pos_x, buffer_cursor_pos_y);
@@ -494,7 +553,7 @@ void clear_irq_mask(u8 irq_line) {
 }
 
 void test(void *a) {
-    kprint("", a);
+    kprint(S(""), a);
 }
 
 extern "C"
@@ -520,13 +579,19 @@ void kernel_main(Multiboot_Information *info) {
     init_interrupt_descriptor_table();
     set_idt(&idt_table, sizeof(idt_table[0]) * 256);
     pic_remap(0x20, 0x28);
-    asm("sti");
+    // asm("sti");
     kprint(S("done\n"));
     
     kprint(S("Testing interrupt..."));
     int k = 1;
     int a = 0;
-    k = k / a;
+    // k = k / a;
     kprint(S("done\n"));
     test(&k);
+
+    for (int i = 0; i <= 32; ++i) {
+        kprint(S("%u\n"), i);
+    }
+
+    kprint(S("END!"));
 }
