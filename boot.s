@@ -24,14 +24,42 @@ global _start:function (_start.end - _start)
 
 _start:
 	cli
+	mov esp, (stack_top - 0xC0000000)
+	add ebx, 0xC0000000
+	push ebx
+
+	extern init_page_table_directory
+	call init_page_table_directory
+	pop ebx
+	
+	mov cr3, eax
+	mov eax, cr0
+	or eax, 0x80000000
+	mov cr0, eax
+
 	mov esp, stack_top
 	push ebx
-	extern kernel_main
-	call kernel_main
+
+	; unmap the first page directory
+	; we can't just unmap this in init_page_table_directory because
+	; that would make the address that our instruction pointer is at
+	; invalid and thus fault!
+	extern unmap_page_table
+	push 0
+	call unmap_page_table
+	pop eax
+
+	lea ecx, [start_kernel]
+	jmp ecx
 	cli
 .hang: hlt
 	jmp .hang
 .end:
+
+start_kernel:
+	extern kernel_main
+	call kernel_main
+	hlt
 
 global invalidate_page_i486
 invalidate_page_i486:
