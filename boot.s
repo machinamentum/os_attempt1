@@ -86,6 +86,39 @@ enable_paging:
 	mov cr0, eax
 	ret
 
+gdtr dw 0
+	 dd 0
+
+global set_gdt
+set_gdt:
+	mov eax, [esp+4]
+	mov [gdtr+2], eax
+	mov ax, [esp+8]
+	mov [gdtr], ax	
+	lgdt [gdtr]
+	
+	jmp 0x08:reload_segments
+reload_segments:
+	mov ax, 0x10
+	mov ds, ax
+	mov es, ax
+	mov fs, ax
+	mov gs, ax
+	mov ss, ax
+	ret
+
+idtr dw 0
+	 dd 0
+
+global set_idt
+set_idt:
+	mov eax, [esp+4]
+	mov [idtr+2], eax
+	mov ax, [esp+8]
+	mov [idtr], ax
+	lidt [idtr]
+	ret
+
 global _port_io_read_u8
 global _port_io_write_u8
 
@@ -107,3 +140,25 @@ _port_io_read_u8:
 	mov dx, [esp+4]
 	in al, dx
 	ret
+
+global _port_io_read_u32
+_port_io_read_u32:
+	mov dx, [esp+4]
+	in eax, dx
+	ret
+
+global _io_wait
+_io_wait:
+	out 0x80, al
+	ret
+
+
+global __irq_0x00_handler
+__irq_0x00_handler:
+	pushad
+	push 0x00
+	extern irq_handler	
+	call irq_handler
+	pop eax
+	popad
+	iret

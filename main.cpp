@@ -3,6 +3,7 @@
 
 #define ALIGN(x) __attribute__((aligned(x)))
 
+#define PAGE_SIZE 0x1000
 
 typedef int64_t s64;
 typedef int32_t s32;
@@ -33,7 +34,14 @@ extern "C"
 void _port_io_write_u8(u16 port, u8 value);
 
 extern "C"
-u8 _port_io_read_u8(u16 port);
+u8  _port_io_read_u8(u16 port);
+extern "C"
+u32 _port_io_read_u32(u16 port);
+extern "C"
+void _io_wait();
+
+extern "C"
+void __irq_0x00_handler();
 
 struct String {
     u8 *data;
@@ -119,6 +127,9 @@ void Vga::print_valist(String fmt, va_list a_list) {
                 
                 if (c == 'u') {
                     write_u32(va_arg(a_list, u32));
+                } else if (c == 'S') {
+                    String as = va_arg(a_list, String);
+                    print(as);
                 } else {
                     // @TODO
                     write(c);
@@ -259,8 +270,8 @@ void invalidate_page(u32 page) {
 }
 
 
-u32 page_directory[1024] ALIGN(4096);
-u32 first_page_table[1024] ALIGN(4096);
+u32 page_directory[1024] ALIGN(PAGE_SIZE);
+u32 first_page_table[1024] ALIGN(PAGE_SIZE);
 
 /*
 u32 virtual_to_physical_address(u32 virtual_addr) {
@@ -315,13 +326,12 @@ u32 *init_page_table_directory() {
     }
     
     for (int i = 0; i < 1024; ++i) {
-        pt[i] = (i * 0x1000) | PAGE_PRESENT | PAGE_READ_WRITE;
+        pt[i] = (i * PAGE_SIZE) | PAGE_PRESENT | PAGE_READ_WRITE;
     }
     
     u32 dir_index = ((u32)&__KERNEL_VIRTUAL_BASE) >> 22;
     pd[0] = ((u32) pt) | PAGE_PRESENT | PAGE_READ_WRITE;
     pd[dir_index] = ((u32) pt) | PAGE_PRESENT | PAGE_READ_WRITE;
-    // page_directory[0] = ((u32) first_page_table) | PAGE_PRESENT | PAGE_READ_WRITE;
     
     // map last page to the PDE
     pd[1023] = ((u32) pd) | PAGE_PRESENT | PAGE_READ_WRITE;
@@ -338,20 +348,185 @@ void kprint(String s, ...) {
     va_end(a_list);
 }
 
+void kprint_valist(String s, va_list a_list) {
+    vga.print_valist(s, a_list);
+}
+
+void kerror(String s, ...) {
+    va_list a_list;
+    va_start(a_list, s);
+    kprint_valist(s, a_list);
+    va_end(a_list);
+    asm("hlt");
+}
+
+void _kassert(bool arg, String s, String file, u32 line) {
+    if (arg) return;
+    
+    kerror(S("Assertion failed: %S,%u: %S"), file, line, s);
+}
+#define kassert(arg) _kassert((arg), S(#arg), S(__FILE__), __LINE__)
+
+extern "C"
+void set_gdt(void *gdt, u16 size);
+
+u64 gdt_table[64];
+struct {
+    u16 size;
+    u32 offset;
+} gdt_descriptor;
+
+void encode_gdt_entry(u64 *gdt_entry, u32 base, u32 limit, u8 type) {
+    u8 *target = reinterpret_cast<u8 *>(gdt_entry);
+    
+    if ((limit > 65536) && ((limit & 0xFFF) != 0xFFF)) {
+        kerror(S("Error: GDT limit is invalid"));
+    }
+    
+    if (limit > 65536) {
+        limit = limit >> 12;
+        target[6] = 0xC0;
+    } else {
+        target[6] = 0x40;
+    }
+    
+    target[0] = limit & 0xFF;
+    target[1] = (limit >> 8) & 0xFF;
+    target[6] |= (limit >> 16) & 0xF;
+    
+    target[2] = base & 0xFF;
+    target[3] = (base >> 8) & 0xFF;
+    target[4] = (base >> 16) & 0xFF;
+    target[7] = (base >> 24) & 0xFF;
+    
+    target[5] = type;
+}
+
+#define INTERRUPT_TYPE_TASK_GATE_32 (0x5)
+#define INTERRUPT_TYPE_GATE_16      (0x6)
+#define INTERRUPT_TYPE_TRAP_GATE_16 (0x7)
+#define INTERRUPT_TYPE_GATE_32      (0xE)
+#define INTERRUPT_TYPE_TRAP_GATE_32 (0xF)
+#define INTERRUPT_PRESENT           (1 << 7)
+#define INTERRUPT_STORAGE_SEGMENT   (1 << 4)
+
+extern "C"
+void set_idt(void *idt, u16 size);
+
+extern "C"
+void irq_handler(u32 irq) {
+    kerror(S("IRQ: %u"), irq);
+}
+
+struct Idt_Descriptor {
+    u16 offset_1;
+    u16 selector;
+    u8 zero;
+    u8 type_attr;
+    u16 offset_2;
+};
+
+Idt_Descriptor idt_table[256];
+
+void set_idt_entry(Idt_Descriptor *idt, u32 offset, u8 type_attr, u8 privelege) {
+    idt->offset_1 = offset & 0xFFFF;
+    idt->selector = 0x08;
+    idt->zero = 0;
+    idt->type_attr = ((privelege << 5) & 0x3) | type_attr;
+    idt->offset_2 = (offset >> 16) & 0xFFFF;
+}
+
+void init_interrupt_descriptor_table() {
+    for (int i = 0; i < 256; ++i) {
+        Idt_Descriptor *idt = &idt_table[i];
+        set_idt_entry(idt, (u32)&__irq_0x00_handler, INTERRUPT_PRESENT | INTERRUPT_TYPE_GATE_32, 0);
+    }
+}
+
+#define PIC1    0x20
+#define PIC2    0xA0
+#define PIC1_DATA 0x21
+#define PIC2_DATA 0xA1
+
+void pic_set_eoi(u8 irq) {
+    if (irq >= 8) _port_io_write_u8(PIC2, 0x20);
+    _port_io_write_u8(PIC1, 0x20);
+}
+
+void pic_remap(u8 offset1, u8 offset2) {
+    u8 a1 = _port_io_read_u8(PIC1_DATA);
+    u8 a2 = _port_io_read_u8(PIC2_DATA);
+    
+    _port_io_write_u8(PIC1, 0x11); _io_wait();
+    _port_io_write_u8(PIC2, 0x11); _io_wait();
+    
+    _port_io_write_u8(PIC1_DATA, offset1); _io_wait();
+    _port_io_write_u8(PIC2_DATA, offset2); _io_wait();
+    _port_io_write_u8(PIC1_DATA, 4); _io_wait(); // tell master that a slave is at IRQ2
+    _port_io_write_u8(PIC2_DATA, 2); _io_wait(); // tell slave that it is cascading
+    _port_io_write_u8(PIC1_DATA, 0x01); _io_wait();
+    _port_io_write_u8(PIC2_DATA, 0x01); _io_wait();
+    
+    _port_io_write_u8(PIC1_DATA, a1);
+    _port_io_write_u8(PIC2_DATA, a2);
+}
+
+void set_irq_mask(u8 irq_line) {
+    u16 port = PIC1_DATA;
+    if (irq_line >= 8) {
+        port = PIC2_DATA;
+        irq_line -= 8;
+    }
+    
+    u8 value = _port_io_read_u8(port) | (1 << irq_line);
+    _port_io_write_u8(port, value);
+}
+
+void clear_irq_mask(u8 irq_line) {
+    u16 port = PIC1_DATA;
+    if (irq_line >= 8) {
+        port = PIC2_DATA;
+        irq_line -= 8;
+    }
+    
+    u8 value = _port_io_read_u8(port) & ~(1 << irq_line);
+    _port_io_write_u8(port, value);
+}
+
+void test(void *a) {
+    kprint("", a);
+}
+
 extern "C"
 void kernel_main(Multiboot_Information *info) {
     upper_memory_size = info->mem_upper;
     vga = Vga();
-    
-    // init_page_table_directory();
-    // load_page_directory(&page_directory[0]);
-    // enable_paging();
-    
-    // map_page((u32) VGA_ADDRESS, 0x34000000);
     
     vga.enable_cursor(true);
     vga.clear_screen();
     kprint(S("Hello, Sailor!\n"));
     kprint(S("mem_lower: %u\n"), info->mem_lower);
     kprint(S("mem_upper: %u\n"), info->mem_upper);
+    kprint(S("Setting up GDT..."));
+    
+    encode_gdt_entry(&gdt_table[0], 0, 0, 0);
+    encode_gdt_entry(&gdt_table[1], 0, 0xFFFFFFFF, 0x9A); // code segment
+    encode_gdt_entry(&gdt_table[2], 0, 0xFFFFFFFF, 0x92); // data segment
+    gdt_descriptor.size = sizeof(u64) * 3;
+    gdt_descriptor.offset = reinterpret_cast<u32>(&gdt_table[0]);
+    set_gdt(&gdt_table, sizeof(u64) * 3);
+    kprint(S("done\n"));
+    kprint(S("Setting up IDT..."));
+    init_interrupt_descriptor_table();
+    set_idt(&idt_table, sizeof(idt_table[0]) * 256);
+    pic_remap(0x20, 0x28);
+    asm("sti");
+    kprint(S("done\n"));
+    
+    kprint(S("Testing interrupt..."));
+    int k = 1;
+    int a = 0;
+    k = k / a;
+    kprint(S("done\n"));
+    test(&k);
 }
