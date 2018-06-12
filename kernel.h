@@ -10,6 +10,8 @@
 
 #define KERNEL_VIRTUAL_BASE_ADDRESS 0xC0000000
 
+#define UNUSED(x) do { (void)(x); } while (0)
+
 typedef int64_t s64;
 typedef int32_t s32;
 typedef int16_t s16;
@@ -36,6 +38,10 @@ String temp_string(char *c_string);
 
 #define S(str) (temp_string((str)))
 
+void kprint(char *s, ...);
+
+void kerror(char *s, ...);
+
 void kprint(String s, ...);
 
 void kerror(String s, ...);
@@ -55,5 +61,7 @@ extern "C"
 u32 _port_io_read_u32(u16 port);
 extern "C"
 void _io_wait();
+
+void pic_set_eoi(u8 irq);
 
 #endif // KERNEL_H

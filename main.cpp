@@ -180,6 +180,13 @@ u32 *init_page_table_directory() {
 
 Vga vga;
 
+void kprint(char *s, ...) {
+    va_list a_list;
+    va_start(a_list, s);
+    vga.print_valist(S(s), a_list);
+    va_end(a_list);
+}
+
 void kprint(String s, ...) {
     va_list a_list;
     va_start(a_list, s);
@@ -189,6 +196,14 @@ void kprint(String s, ...) {
 
 void kprint_valist(String s, va_list a_list) {
     vga.print_valist(s, a_list);
+}
+
+void kerror(char *s, ...) {
+    va_list a_list;
+    va_start(a_list, s);
+    kprint_valist(S(s), a_list);
+    va_end(a_list);
+    asm("hlt");
 }
 
 void kerror(String s, ...) {
@@ -202,7 +217,7 @@ void kerror(String s, ...) {
 void _kassert(bool arg, String s, String file, u32 line) {
     if (arg) return;
     
-    kerror(S("Assertion failed: %S,%u: %S"), file, line, s);
+    kerror("Assertion failed: %S,%u: %S", file, line, s);
 }
 
 extern "C"
@@ -247,7 +262,7 @@ void encode_gdt_entry(u64 *gdt_entry, u32 base, u32 limit, u8 type) {
 #define PIC2_DATA 0xA1
 
 void pic_set_eoi(u8 irq) {
-    if (irq >= 8) _port_io_write_u8(PIC2, 0x20);
+    if (irq >= 0x28) _port_io_write_u8(PIC2, 0x20);
     _port_io_write_u8(PIC1, 0x20);
 }
 
@@ -265,8 +280,8 @@ void pic_remap(u8 offset1, u8 offset2) {
     _port_io_write_u8(PIC1_DATA, 0x01); _io_wait();
     _port_io_write_u8(PIC2_DATA, 0x01); _io_wait();
     
-    _port_io_write_u8(PIC1_DATA, a1);
-    _port_io_write_u8(PIC2_DATA, a2);
+    _port_io_write_u8(PIC1_DATA, 0);
+    _port_io_write_u8(PIC2_DATA, 0);
 }
 
 void set_irq_mask(u8 irq_line) {
@@ -317,14 +332,10 @@ void kernel_main(Multiboot_Information *info) {
     kprint(S("done\n"));
     
     kprint(S("Testing interrupt..."));
-    int k = 1;
-    int a = 0;
-    // k = k / a;
     kprint(S("done\n"));
 
-    for (int i = 0; i <= 32; ++i) {
-        kprint(S("%u\n"), i);
+    kerror(S("END!"));
+    for(;;) {
+        asm("hlt");
     }
-
-    kprint(S("END!"));
 }
