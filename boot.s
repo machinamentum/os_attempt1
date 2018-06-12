@@ -41,7 +41,7 @@ _start:
 	push ebx
 
 	; unmap the first page directory
-	; we can't just unmap this in init_page_table_directory because
+	; we cant just unmap this in init_page_table_directory because
 	; that would make the address that our instruction pointer is at
 	; invalid and thus fault!
 	extern unmap_page_table
@@ -151,14 +151,3 @@ global _io_wait
 _io_wait:
 	out 0x80, al
 	ret
-
-
-global __irq_0x00_handler
-__irq_0x00_handler:
-	pushad
-	push 0x00
-	extern irq_handler	
-	call irq_handler
-	pop eax
-	popad
-	iret

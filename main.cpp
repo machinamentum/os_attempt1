@@ -1,23 +1,9 @@
-#include <stdint.h>
+
+#include "kernel.h"
+#include "vga.h"
+#include "interrupts.h"
+
 #include <stdarg.h>
-
-#define ALIGN(x) __attribute__((aligned(x)))
-#define PACKED   __attribute__((packed))
-
-#define PAGE_SIZE 0x1000
-
-typedef int64_t s64;
-typedef int32_t s32;
-typedef int16_t s16;
-typedef int8_t  s8;
-
-typedef uint64_t u64;
-typedef uint32_t u32;
-typedef uint16_t u16;
-typedef uint8_t  u8;
-
-typedef float float32;
-typedef double float64;
 
 struct Multiboot_Mmap {
     u32 size;
@@ -51,26 +37,6 @@ struct Multiboot_Information {
     u32 boot_loader_name;
 };
 
-extern "C"
-void _port_io_write_u32(u16 port, u32 value);
-extern "C"
-void _port_io_write_u8(u16 port, u8 value);
-
-extern "C"
-u8  _port_io_read_u8(u16 port);
-extern "C"
-u32 _port_io_read_u32(u16 port);
-extern "C"
-void _io_wait();
-
-extern "C"
-void __irq_0x00_handler();
-
-struct String {
-    u8 *data;
-    s64 length;
-};
-
 s64 strlen(char *c_string) {
     if (!c_string) return 0;
     
@@ -100,190 +66,7 @@ void memcpy(void *dst, void *src, u32 num) {
     }
 }
 
-#define S(str) (temp_string((str)))
-
 void kprint(String s, ...);
-
-#define VGA_WIDTH 80
-#define VGA_HEGIHT 24
-#define VGA_COLOR(fg, bg) (((fg) | ((bg) << 4)) << 8)
-#define VGA_BLINK_FLAG ((1 << 8) << 8)
-
-static u16 *const VGA_ADDRESS = (u16 *)(0xB8000 + 0xC0000000);
-
-struct Vga {
-    
-    // @Volatile these must be in order as the values are tied to the hardware VGA interface!
-    enum Color {
-        BLACK = 0,
-        BLUE,
-        GREEN,
-        CYAN,
-        RED,
-        MAGENTA,
-        BROWN,
-        LIGHT_GREY,
-        DARK_GREY,
-        LIGHT_BLUE,
-        LIGHT_GREEN,
-        LIGHT_CYAN,
-        LIGHT_RED,
-        LIGHT_MAGENTA,
-        LIGHT_BROWN,
-        WHITE,
-    };
-    
-    u16 *buffer = VGA_ADDRESS;
-    u16 color = VGA_COLOR(Color::WHITE, Color::BLACK);
-    u32 buffer_cursor_pos_x = 0;
-    u32 buffer_cursor_pos_y = 0;
-    void write(String s);
-    void write_u32(u32 value);
-    void write(u8 c);
-    void print(String fmt, ...);
-    void print_valist(String fmt, va_list a_list);
-    void clear_screen();
-    
-    void enable_cursor(bool enable);
-    void set_cursor_coordinates(u16 x, u16 y);
-    void scroll_one_line();
-};
-
-void Vga::scroll_one_line() {
-    u16 value = VGA_COLOR(Color::WHITE, Color::BLACK);
-    for (s32 i = 1; i < VGA_HEGIHT; ++i) {
-        for (u64 x = 0; x < VGA_WIDTH; ++x) {
-            u64 index = x + VGA_WIDTH * (i-1);
-            buffer[index] = value;
-        }
-        u16 *dst = &buffer[((i-1) * VGA_WIDTH)];
-        u16 *src = &buffer[(i * VGA_WIDTH)];
-        memcpy(dst, src, sizeof(u16) * VGA_WIDTH);
-    }
-
-    for (u64 x = 0; x < VGA_WIDTH; ++x) {
-        u64 index = x + VGA_WIDTH * (VGA_HEGIHT-1);
-        buffer[index] = value;
-    }
-
-    buffer_cursor_pos_x = 0;
-    buffer_cursor_pos_y--;
-}
-
-void Vga::print_valist(String fmt, va_list a_list) {
-    for (s64 i = 0; i < fmt.length; ++i) {
-        u8 c = fmt.data[i];
-        
-        if (c == '%') {
-            if (i < fmt.length-1) {
-                ++i;
-                c = fmt.data[i];
-                
-                if (c == 'u') {
-                    write_u32(va_arg(a_list, u32));
-                } else if (c == 'S') {
-                    String as = va_arg(a_list, String);
-                    print(as);
-                } else {
-                    // @TODO
-                    write(c);
-                }
-            } else {
-                write(c);
-            }
-        } else {
-            write(c);
-        }
-    }
-}
-
-void Vga::print(String fmt, ...) {
-    va_list a_list;
-    va_start(a_list, fmt);
-    print_valist(fmt, a_list);
-    va_end(a_list);
-}
-
-void Vga::write_u32(u32 value) {
-    char *hex_values = "0123456789ABCDEF";
-    
-    for (int i = 0; i < 8; ++i) {
-        u32 v = (value >> ((7 - i)*4)) & 0xF;
-        write(hex_values[v]);
-    }
-}
-
-void Vga::write(u8 c) {
-    if (c == '\n') {
-        buffer_cursor_pos_x = 0;
-        buffer_cursor_pos_y++;
-        
-        if (buffer_cursor_pos_y >= VGA_HEGIHT) {
-            scroll_one_line();
-        }
-        return;
-    }
-    u64 index = buffer_cursor_pos_x + VGA_WIDTH * buffer_cursor_pos_y;
-    buffer[index] = color | c;
-    
-    buffer_cursor_pos_x++;
-    
-    if (buffer_cursor_pos_x >= VGA_WIDTH) {
-        buffer_cursor_pos_x = 0;
-        buffer_cursor_pos_y++;
-        
-        if (buffer_cursor_pos_y >= VGA_HEGIHT) {
-            scroll_one_line();
-        }
-    }
-    
-    set_cursor_coordinates(buffer_cursor_pos_x, buffer_cursor_pos_y);
-}
-
-void Vga::write(String s) {
-    for (s64 i = 0; i < s.length; ++i) {
-        u8 c = s.data[i];
-        write(c);
-    }
-}
-
-void Vga::clear_screen() {
-    u16 value = VGA_COLOR(Color::WHITE, Color::BLACK);
-    for (u64 y = 0; y < VGA_HEGIHT; ++y) {
-        for (u64 x = 0; x < VGA_WIDTH; ++x) {
-            u64 index = x + VGA_WIDTH * y;
-            buffer[index] = value;
-        }
-    }
-    
-    buffer_cursor_pos_x = 0;
-    buffer_cursor_pos_y = 0;
-}
-
-void Vga::enable_cursor(bool enable) {
-    if (enable) {
-        _port_io_write_u8(0x3D4, 0x0A);
-        u8 cursor_start = 11;
-        u8 cursor_end = 13;
-        _port_io_write_u8(0x3D5, (_port_io_read_u8(0x3D5) & 0xC0) | cursor_start);
-        
-        _port_io_write_u8(0x3D4, 0x0B);
-        _port_io_write_u8(0x3D5, (_port_io_read_u8(0x3E0) & 0xE0) | cursor_end);
-        
-        set_cursor_coordinates(0, 0);
-    } else {
-        _port_io_write_u8(0x3D4, 0x0A);
-        _port_io_write_u8(0x3D5, 0x20);
-    }
-}
-
-void Vga::set_cursor_coordinates(u16 x, u16 y) {
-    u16 pos = y * VGA_WIDTH + x;
-    _port_io_write_u8(0x3D4, 0x0F);
-    _port_io_write_u8(0x3D5, pos & 0xFF);
-    _port_io_write_u8(0x3D4, 0x0E);
-    _port_io_write_u8(0x3D5, (pos >> 8) & 0xFF);
-}
 
 // this manages the initial 128MB or so worth of pages
 // then we can find pages for use for other memory allocations
@@ -368,9 +151,6 @@ void unmap_page_table(u32 dir_index) {
     invalidate_page((u32) pd);
 }
 
-
-extern int __KERNEL_VIRTUAL_BASE;
-
 // operates in physical address space!
 // should only be called by boot.s!
 extern "C"
@@ -388,7 +168,7 @@ u32 *init_page_table_directory() {
         pt[i] = (i * PAGE_SIZE) | PAGE_PRESENT | PAGE_READ_WRITE;
     }
     
-    u32 dir_index = ((u32)&__KERNEL_VIRTUAL_BASE) >> 22;
+    u32 dir_index = KERNEL_VIRTUAL_BASE_ADDRESS >> 22;
     pd[0] = ((u32) pt) | PAGE_PRESENT | PAGE_READ_WRITE;
     pd[dir_index] = ((u32) pt) | PAGE_PRESENT | PAGE_READ_WRITE;
     
@@ -424,7 +204,6 @@ void _kassert(bool arg, String s, String file, u32 line) {
     
     kerror(S("Assertion failed: %S,%u: %S"), file, line, s);
 }
-#define kassert(arg) _kassert((arg), S(#arg), S(__FILE__), __LINE__)
 
 extern "C"
 void set_gdt(void *gdt, u16 size);
@@ -461,46 +240,6 @@ void encode_gdt_entry(u64 *gdt_entry, u32 base, u32 limit, u8 type) {
     target[5] = type;
 }
 
-#define INTERRUPT_TYPE_TASK_GATE_32 (0x5)
-#define INTERRUPT_TYPE_GATE_16      (0x6)
-#define INTERRUPT_TYPE_TRAP_GATE_16 (0x7)
-#define INTERRUPT_TYPE_GATE_32      (0xE)
-#define INTERRUPT_TYPE_TRAP_GATE_32 (0xF)
-#define INTERRUPT_PRESENT           (1 << 7)
-#define INTERRUPT_STORAGE_SEGMENT   (1 << 4)
-
-extern "C"
-void set_idt(void *idt, u16 size);
-
-extern "C"
-void irq_handler(u32 irq) {
-    kerror(S("IRQ: %u"), irq);
-}
-
-struct Idt_Descriptor {
-    u16 offset_1;
-    u16 selector;
-    u8 zero;
-    u8 type_attr;
-    u16 offset_2;
-};
-
-Idt_Descriptor idt_table[256];
-
-void set_idt_entry(Idt_Descriptor *idt, u32 offset, u8 type_attr, u8 privelege) {
-    idt->offset_1 = offset & 0xFFFF;
-    idt->selector = 0x08;
-    idt->zero = 0;
-    idt->type_attr = ((privelege << 5) & 0x3) | type_attr;
-    idt->offset_2 = (offset >> 16) & 0xFFFF;
-}
-
-void init_interrupt_descriptor_table() {
-    for (int i = 0; i < 256; ++i) {
-        Idt_Descriptor *idt = &idt_table[i];
-        set_idt_entry(idt, (u32)&__irq_0x00_handler, INTERRUPT_PRESENT | INTERRUPT_TYPE_GATE_32, 0);
-    }
-}
 
 #define PIC1    0x20
 #define PIC2    0xA0
@@ -552,10 +291,6 @@ void clear_irq_mask(u8 irq_line) {
     _port_io_write_u8(port, value);
 }
 
-void test(void *a) {
-    kprint(S(""), a);
-}
-
 extern "C"
 void kernel_main(Multiboot_Information *info) {
     upper_memory_size = info->mem_upper;
@@ -577,9 +312,8 @@ void kernel_main(Multiboot_Information *info) {
     kprint(S("done\n"));
     kprint(S("Setting up IDT..."));
     init_interrupt_descriptor_table();
-    set_idt(&idt_table, sizeof(idt_table[0]) * 256);
     pic_remap(0x20, 0x28);
-    // asm("sti");
+    asm("sti");
     kprint(S("done\n"));
     
     kprint(S("Testing interrupt..."));
@@ -587,7 +321,6 @@ void kernel_main(Multiboot_Information *info) {
     int a = 0;
     // k = k / a;
     kprint(S("done\n"));
-    test(&k);
 
     for (int i = 0; i <= 32; ++i) {
         kprint(S("%u\n"), i);
