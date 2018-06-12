@@ -32,6 +32,8 @@ struct String {
 
 void memcpy(void *dst, void *src, u32 num);
 
+void zero_memory(void *dst, u32 size);
+
 s64 strlen(char *c_string);
 
 String temp_string(char *c_string);

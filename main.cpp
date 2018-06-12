@@ -66,20 +66,92 @@ void memcpy(void *dst, void *src, u32 num) {
     }
 }
 
+void zero_memory(void *_dst, u32 size) {
+    u8 *dst = reinterpret_cast<u8 *>(_dst);
+    for (u32 i = 0; i < size; ++i) {
+        dst[i] =  0;
+    }
+}
+
+enum ALLOCATOR_MODE {
+    FREE,
+    ALLOC,
+};
+
+typedef void *(*allocator_type)(ALLOCATOR_MODE, void *existing, u32 size);
+
+template <typename T>
+struct Array {
+    T *data = nullptr;
+    u64 count = 0;
+    u64 allocated = 0;
+    allocator_type allocator = nullptr;
+
+    T &operator [](s64 index) {
+        kassert(index >= 0 && index < count);
+        return data[index];
+    }
+};
+
 void kprint(String s, ...);
 
-// this manages the initial 128MB or so worth of pages
-// then we can find pages for use for other memory allocations
-// including more pages for bitmaps for further pages
-u32 initial_memory_use_bitmap[1024] ALIGN(4096);
-u32 upper_memory_size; // set in kernel_main
+#define BITMAP_BUFFER_COUNT 1024
+#define BITMAP_NUM_PAGES    (BITMAP_BUFFER_COUNT * 32)
+u32 initial_memory_use_bitmap[BITMAP_BUFFER_COUNT] ALIGN(4096);
+
+struct Bitmap_Entry {
+    u32 range_start;
+    u32 range_end;
+    u32 *buffer;
+};
+
+Bitmap_Entry initial_bitmap_entry;
+u32 upper_memory_size_pages; // initially set in kernel_main
+Array<Bitmap_Entry> bitmap_entries;
+u32 num_bitmap_entries;
+
+void claim_pages(u32 physical, u32 num_pages) {
+    kassert((physical & (PAGE_SIZE-1)) == 0);
+
+    u32 page_number = ((physical - 0x00100000) / PAGE_SIZE);
+    u32 bitmap_index = page_number / BITMAP_NUM_PAGES;
+    u32 buffer_index = (bitmap_index) / 32;
+    u32 page_bit = page_number % 32;
+
+
+}
+
+u32 maybe_claim_pages(u32 num) {
+    if (num > upper_memory_size_pages) {
+        u32 out = upper_memory_size_pages;
+        upper_memory_size_pages = 0;
+        return out;
+    }
+
+    upper_memory_size_pages -= num;
+    return num;
+}
+
+void make_bitmap_entry(Bitmap_Entry *entry, u32 range_start, u32 num_pages, u32 *bitmap) {
+    kassert(num_pages && "cannot make a bitmap entry of zero size!");
+
+
+}
 
 u32 page_allocator_init() {
-    for (int i = 0; i < 1024; ++i) {
-        initial_memory_use_bitmap[i] = 0; 
-    }
+    zero_memory(&initial_memory_use_bitmap, sizeof(initial_memory_use_bitmap));
+    make_bitmap_entry(&initial_bitmap_entry, 0x00100000, maybe_claim_pages(BITMAP_NUM_PAGES), &initial_memory_use_bitmap);
+    bitmap_entries = &initial_bitmap_entry;
+    num_bitmap_entries = 1;
     
-    
+    extern int __KERNEL_MEMORY_START;
+    extern int __KERNEL_MEMORY_END;
+
+    u32 kstart = (u32)&__KERNEL_MEMORY_START;
+    u32 kend = (u32)&__KERNEL_MEMORY_END;
+
+    // mark kernel area as in use
+    claim_pages(kstart - KERNEL_VIRTUAL_BASE_ADDRESS, kend - kstart);
 }
 
 #define PAGE_PRESENT           (1 << 0)
@@ -280,8 +352,8 @@ void pic_remap(u8 offset1, u8 offset2) {
     _port_io_write_u8(PIC1_DATA, 0x01); _io_wait();
     _port_io_write_u8(PIC2_DATA, 0x01); _io_wait();
     
-    _port_io_write_u8(PIC1_DATA, 0);
-    _port_io_write_u8(PIC2_DATA, 0);
+    _port_io_write_u8(PIC1_DATA, a1);
+    _port_io_write_u8(PIC2_DATA, a2);
 }
 
 void set_irq_mask(u8 irq_line) {
@@ -308,7 +380,7 @@ void clear_irq_mask(u8 irq_line) {
 
 extern "C"
 void kernel_main(Multiboot_Information *info) {
-    upper_memory_size = info->mem_upper;
+    upper_memory_size_pages = info->mem_upper / 4; // convert KB to pages (4096 byte blocks)
     vga = Vga();
     
     vga.enable_cursor(true);
