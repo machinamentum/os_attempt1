@@ -4,7 +4,7 @@
 
 extern "C"
 void irq_handler(u32 irq) {
-    kerror(S("IRQ: %u"), irq);
+    kerror("IRQ: %u", irq);
 }
 
 struct Idt_Descriptor {
@@ -79,7 +79,7 @@ void __irq_0x07_handler(void *arg) {
 __attribute__((interrupt))
 void __irq_0x08_handler(void *arg, u32 error_code) {
     UNUSED(arg);
-
+    UNUSED(error_code);
 }
 
 __attribute__((interrupt))
@@ -91,25 +91,25 @@ void __irq_0x09_handler(void *arg) {
 __attribute__((interrupt))
 void __irq_0x0A_handler(void *arg, u32 error_code) {
     UNUSED(arg);
-
+    UNUSED(error_code);
 }
 
 __attribute__((interrupt))
 void __irq_0x0B_handler(void *arg, u32 error_code) {
     UNUSED(arg);
-
+    UNUSED(error_code);
 }
 
 __attribute__((interrupt))
 void __irq_0x0C_handler(void *arg, u32 error_code) {
     UNUSED(arg);
-
+    UNUSED(error_code);
 }
 
 __attribute__((interrupt))
 void __irq_0x0D_handler(void *arg, u32 error_code) {
     UNUSED(arg);
-
+    UNUSED(error_code);
 }
 
 __attribute__((interrupt))
@@ -121,7 +121,6 @@ void __irq_0x0E_handler(void *arg, u32 error_code) {
 __attribute__((interrupt))
 void __irq_0x0F_handler(void *arg) {
     UNUSED(arg);
-
 }
 
 __attribute__((interrupt))
@@ -133,7 +132,7 @@ void __irq_0x10_handler(void *arg) {
 __attribute__((interrupt))
 void __irq_0x11_handler(void *arg, u32 error_code) {
     UNUSED(arg);
-
+    UNUSED(error_code);
 }
 
 __attribute__((interrupt))
@@ -211,7 +210,7 @@ void __irq_0x1D_handler(void *arg) {
 __attribute__((interrupt))
 void __irq_0x1E_handler(void *arg, u32 error_code) {
     UNUSED(arg);
-
+    UNUSED(error_code);
 }
 
 __attribute__((interrupt))

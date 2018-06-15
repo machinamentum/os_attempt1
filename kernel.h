@@ -2,6 +2,7 @@
 #define KERNEL_H
 
 #include <stdint.h>
+#include <stdarg.h>
 
 #define ALIGN(x) __attribute__((aligned(x)))
 #define PACKED   __attribute__((packed))
@@ -38,8 +39,6 @@ s64 strlen(char *c_string);
 
 String temp_string(char *c_string);
 
-#define S(str) (temp_string((str)))
-
 void kprint(char *s, ...);
 
 void kerror(char *s, ...);
@@ -50,7 +49,9 @@ void kerror(String s, ...);
 
 void _kassert(bool arg, String s, String file, u32 line);
 
-#define kassert(arg) _kassert((arg), S(#arg), S(__FILE__), __LINE__)
+void _kassert(bool arg, char *s, char *file, u32 line);
+
+#define kassert(arg) _kassert((arg), #arg, __FILE__, __LINE__)
 
 extern "C"
 void _port_io_write_u32(u16 port, u32 value);

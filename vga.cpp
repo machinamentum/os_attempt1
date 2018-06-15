@@ -32,12 +32,33 @@ void Vga::print_valist(String fmt, va_list a_list) {
             if (i < fmt.length-1) {
                 ++i;
                 c = fmt.data[i];
-                
+
+                int size = 4;
+                // if (c == 'l') {
+                //     size = 8;
+
+                //     if (i < fmt.length-1) {
+                //         ++i;
+                //         c = fmt.data[i];
+                //     }
+                // }
+
                 if (c == 'u') {
-                    write_u32(va_arg(a_list, u32));
+                    if (size == 4) write_u32_decimal(va_arg(a_list, u32));
+                    // else if (size == 8) write_u64_decimal(va_arg(a_list, u64));
+                } else if (c == 'd') {
+                    if (size == 4) write_s32_decimal(va_arg(a_list, s32));
+                    // else if (size == 8) write_s64_decimal(va_arg(a_list, s64));
                 } else if (c == 'S') {
                     String as = va_arg(a_list, String);
                     print(as);
+                } else if (c == 's') {
+                    char *as = va_arg(a_list, char *);
+                    print(temp_string(as));
+                } else if (c == 'X') {
+                    write_u32_hex(va_arg(a_list, u32), true);
+                } else if (c == 'x') {
+                    write_u32_hex(va_arg(a_list, u32), false);
                 } else {
                     // @TODO
                     write(c);
@@ -58,13 +79,41 @@ void Vga::print(String fmt, ...) {
     va_end(a_list);
 }
 
-void Vga::write_u32(u32 value) {
-    char *hex_values = "0123456789ABCDEF";
-    
+void Vga::write_u32_hex(u32 value, bool upper) {
+    char *hex_values;
+    if (upper) hex_values = "0123456789ABCDEF";
+    else hex_values       = "0123456789abcdef";
+
     for (int i = 0; i < 8; ++i) {
         u32 v = (value >> ((7 - i)*4)) & 0xF;
         write(hex_values[v]);
     }
+}
+
+void Vga::write_u32_decimal(u32 value) {
+    char *dec_values = "0123456789";
+    char buffer[11];
+    zero_memory(&buffer, sizeof(buffer));
+    u8 index = 0;
+
+    do {
+        buffer[index++] = dec_values[value % 10];
+        value /= 10;
+    } while (value > 0);
+
+    for (int i = 10; i >= 0; --i) {
+        char c = buffer[i];
+        if (c == 0) continue;
+        write(c);
+    }
+}
+
+void Vga::write_s32_decimal(s32 value) {
+     if (value < 0) {
+        write('-');
+        value = -value;
+    }
+    write_u32_decimal(value);
 }
 
 void Vga::write(u8 c) {
