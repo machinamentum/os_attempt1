@@ -31,6 +31,16 @@ struct String {
     s64 length;
 };
 
+void map_page_table(u32 *table, u32 virtual_addr);
+
+u32 next_free_page();
+
+u32 virtual_to_physical_address(u32 virtual_addr);
+
+void map_page(u32 physical, u32 virtual_addr, u32 flags);
+
+void unmap_page(u32 virtual_addr);
+
 void memcpy(void *dst, void *src, u32 num);
 
 void zero_memory(void *dst, u32 size);

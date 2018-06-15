@@ -2,6 +2,7 @@
 #include "kernel.h"
 #include "vga.h"
 #include "interrupts.h"
+#include "heap.h"
 
 struct Multiboot_Mmap {
     u32 size;
@@ -181,6 +182,7 @@ u32 next_free_page() {
     for (s64 i = 0; i < bitmap_entries.count; ++i) {
         auto entry = bitmap_entries[i];
 
+        // @TODO i'm pretty sure this drops a handful of pages if we have a number of pages that don't divide evenly into 32
         u32 buffer_count = ((entry.range_end - entry.range_start) / PAGE_SIZE) / 32;
         for (u32 j = 0; j < buffer_count; ++j) {
             u32 value = entry.buffer[j];
@@ -198,8 +200,6 @@ u32 next_free_page() {
 
     return 0;
 }
-
-
 
 void page_allocator_init() {
     u32 total_num_pages = upper_memory_size_pages;
@@ -249,7 +249,7 @@ void page_allocator_init() {
 
 
 extern "C"
-void load_page_directory(u32 *page_directory);
+void load_page_directory(u32 page_directory);
 extern "C"
 void enable_paging();
 extern "C"
@@ -258,7 +258,7 @@ extern "C"
 void invalidate_page_i486(u32 page);
 
 void invalidate_page(u32 page) {
-    // @TODO maybe
+    // @TODO maybe, invlpg instruction exists in i486 and newer, but we probably don't care to support anything thats several decades old!
     // if (supports_invlpg(cpu)) {
     invalidate_page_i486(page);
     // } else {
@@ -269,8 +269,11 @@ void invalidate_page(u32 page) {
 
 u32 page_directory[1024] ALIGN(PAGE_SIZE);
 u32 first_page_table[1024] ALIGN(PAGE_SIZE);
+// this will allow the heap to map pages into the heap's address space
+// until we can map + generate page tables from the heap
+u32 heap_page_table[1024] ALIGN(PAGE_SIZE);
 
-/*
+
 u32 virtual_to_physical_address(u32 virtual_addr) {
     u32 dir_index = virtual_addr >> 22;
     u32 table_index = (virtual_addr >> 12) & 0x03FF;
@@ -283,53 +286,86 @@ u32 virtual_to_physical_address(u32 virtual_addr) {
     
     return (pt[table_index] & ~0xFFF) + (virtual_addr & 0xFFF);
 }
-*/
 
 void map_page(u32 physical, u32 virtual_addr, u32 flags) {
+    u32 dir_index = virtual_addr >> 22;
+    u32 table_index = (virtual_addr >> 12) & 0x03FF;
+    
+    u32 *pd =  (u32 *) 0xFFFFF000;
+    u32 *pt = ((u32 *) 0xFFC00000) + (0x400 * dir_index);
+    
+    if (!(pd[dir_index] & PAGE_PRESENT)) {
+        _aoeu
+        u32 *table = reinterpret_cast<u32 *>(nullptr);
+        for (int i = 0; i < 1024; ++i) {
+            table[i] = PAGE_READ_WRITE;
+        }
+        pd[dir_index] = virtual_to_physical_address((u32) table) | PAGE_PRESENT | PAGE_READ_WRITE;
+        flush_tlb(); // @Cleanup invalidate the page?
+
+        // it should be accessible now!
+        pt = ((u32 *) 0xFFC00000) + (0x400 * dir_index);
+    }
+    
+    pt[table_index] = (physical | (flags & 0xFFF)) | PAGE_PRESENT;
+}
+
+void unmap_page(u32 virtual_addr) {
     u32 dir_index = virtual_addr >> 22;
     u32 table_index = (virtual_addr >> 12) & 0x03FF;
     
     u32 *pd = (u32 *) 0xFFFFF000;
     u32 *pt = ((u32 *) 0xFFC00000) + (0x400 * dir_index);
     
-    if (!(pd[dir_index] & PAGE_PRESENT)) {
-        
-    }
-    
-    pt[table_index] = (physical | (flags & 0xFFF)) | PAGE_PRESENT;
+    if (!(pd[dir_index] & PAGE_PRESENT)) return;
+    if (!(pt[table_index] & PAGE_PRESENT)) return;
+
+    pt[table_index] = PAGE_READ_WRITE;
 }
 
 extern "C"
 void unmap_page_table(u32 dir_index) {
     page_directory[dir_index] = 0x00000002;
-    u32 *pd = (u32 *)(((u32)&page_directory) - 0xC0000000);
+    u32 *pd = (u32 *)(((u32)&page_directory) - KERNEL_VIRTUAL_BASE_ADDRESS);
     invalidate_page((u32) pd);
+}
+
+void map_page_table(u32 *table, u32 virtual_addr) {
+    u32 table_physical = virtual_to_physical_address(reinterpret_cast<u32>(table));
+    u32 dir_index = virtual_addr >> 22;
+    pd[dir_index] = table_physical | PAGE_PRESENT | PAGE_READ_WRITE;
+    flush_tlb(); // are we supposed to invalidate the directory or the table?
 }
 
 // operates in physical address space!
 // should only be called by boot.s!
 extern "C"
 u32 *init_page_table_directory() {
-    u16 *vga = (u16 *)0xB8000;
-    
-    u32 *pd = (u32 *)(((u32)&page_directory) - 0xC0000000);
-    u32 *pt = (u32 *)(((u32)&first_page_table) - 0xC0000000);
-    
+    u32 *pd = (u32 *)(((u32)&page_directory) - KERNEL_VIRTUAL_BASE_ADDRESS);
+    u32 *pt = (u32 *)(((u32)&first_page_table) - KERNEL_VIRTUAL_BASE_ADDRESS);
+    u32 *hpt = (u32 *)(((u32)&heap_page_table) - KERNEL_VIRTUAL_BASE_ADDRESS);
+
     for (int i = 0; i < 1024; ++i) {
-        pd[i] = 0x00000002;
+        pd[i] = PAGE_READ_WRITE;
     }
     
     for (int i = 0; i < 1024; ++i) {
         pt[i] = (i * PAGE_SIZE) | PAGE_PRESENT | PAGE_READ_WRITE;
     }
+
+    for (int i = 0; i < 1024; ++i) {
+        hpt[i] = PAGE_READ_WRITE;
+    }
     
     u32 dir_index = KERNEL_VIRTUAL_BASE_ADDRESS >> 22;
     pd[0] = ((u32) pt) | PAGE_PRESENT | PAGE_READ_WRITE;
     pd[dir_index] = ((u32) pt) | PAGE_PRESENT | PAGE_READ_WRITE;
+
+    dir_index = HEAP_VIRTUAL_BASE_ADDRESS >> 22;
+    pd[dir_index] = ((u32) hpt) | PAGE_PRESENT | PAGE_READ_WRITE;
     
     // map last page to the PDE
     pd[1023] = ((u32) pd) | PAGE_PRESENT | PAGE_READ_WRITE;
-    *vga = VGA_COLOR(Vga::Color::WHITE, Vga::Color::BLACK) | 'H';
     return &pd[0];
 }
 
@@ -495,6 +531,9 @@ void kernel_main(Multiboot_Information *info) {
     kprint("done\n");
 
     page_allocator_init();
+    init_heap();
+
+    kprint("Kernel is at physical addr: %X\n", virtual_to_physical_address(KERNEL_VIRTUAL_BASE_ADDRESS + 0x00100000));    
     
     // kprint("Testing interrupt...");
     // kprint("done\n");
