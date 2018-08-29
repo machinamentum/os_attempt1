@@ -295,8 +295,7 @@ void map_page(u32 physical, u32 virtual_addr, u32 flags) {
     u32 *pt = ((u32 *) 0xFFC00000) + (0x400 * dir_index);
     
     if (!(pd[dir_index] & PAGE_PRESENT)) {
-        _aoeu
-        u32 *table = reinterpret_cast<u32 *>(nullptr);
+        u32 *table = nullptr;
         for (int i = 0; i < 1024; ++i) {
             table[i] = PAGE_READ_WRITE;
         }
@@ -333,6 +332,8 @@ void unmap_page_table(u32 dir_index) {
 void map_page_table(u32 *table, u32 virtual_addr) {
     u32 table_physical = virtual_to_physical_address(reinterpret_cast<u32>(table));
     u32 dir_index = virtual_addr >> 22;
+
+    u32 *pd = (u32 *) 0xFFFFF000;
     pd[dir_index] = table_physical | PAGE_PRESENT | PAGE_READ_WRITE;
     flush_tlb(); // are we supposed to invalidate the directory or the table?
 }

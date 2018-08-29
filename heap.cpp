@@ -1,4 +1,4 @@
-
+#include "kernel.h"
 #include "heap.h"
 
 
@@ -13,6 +13,7 @@ void heap_ensure_we_can_map_size(u32 size) {
     while ((memory_left - PAGE_SIZE) < size ) { // arbitrary
         kassert(memory_left >= PAGE_SIZE); // we need at least a page to setup a page table
 
+        // @FIXME we cant have this type of recursion here, I think
         u32 *table = heap_alloc(4096);
         for (int i = 0; i < 1024; ++i) {
             table[i] = PAGE_READ_WRITE;
@@ -53,6 +54,4 @@ void *heap_alloc(u32 size) {
         size += PAGE_SIZE;
     }
     heap_reserve(size);
-
-    
 }
