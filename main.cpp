@@ -65,11 +65,13 @@ void memcpy(void *dst, void *src, u32 num) {
     }
 }
 
-void zero_memory(void *_dst, u32 size) {
+void  *zero_memory(void *_dst, u32 size) {
     u8 *dst = reinterpret_cast<u8 *>(_dst);
     for (u32 i = 0; i < size; ++i) {
         dst[i] =  0;
     }
+
+    return _dst;
 }
 
 enum ALLOCATOR_MODE {
@@ -236,17 +238,6 @@ void page_allocator_init() {
     //     // make_bitmap_entry();
     // }
 }
-
-#define PAGE_PRESENT           (1 << 0)
-#define PAGE_READ_WRITE        (1 << 1)
-#define PAGE_IS_NOT_PRIVILEGED (1 << 2) // 1; page is accesable to user land, otherwise only the kernel has access
-#define PAGE_USE_WRITE_THROUGH (1 << 3) // 1; write-through caching, otherwise write-back
-#define PAGE_DO_NOT_CACHE      (1 << 4)
-#define PAGE_HAS_BEEN_ACCESSD  (1 << 5)
-#define PAGE_IS_DIRTY          (1 << 6)
-#define PAGE_SIZE_4MiB         (1 << 7) // 1; page size 4MiB, otherwise page size 4KiB 
-#define PAGE_GLOBAL_BIT        (1 << 8)
-
 
 extern "C"
 void load_page_directory(u32 page_directory);
@@ -534,8 +525,8 @@ void kernel_main(Multiboot_Information *info) {
     page_allocator_init();
     init_heap();
 
-    kprint("Kernel is at physical addr: %X\n", virtual_to_physical_address(KERNEL_VIRTUAL_BASE_ADDRESS + 0x00100000));    
-    
+    kprint("Kernel is at physical addr: %X\n", virtual_to_physical_address(KERNEL_VIRTUAL_BASE_ADDRESS + 0x00100000));
+
     // kprint("Testing interrupt...");
     // kprint("done\n");
 

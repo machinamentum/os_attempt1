@@ -59,6 +59,13 @@ void Vga::print_valist(String fmt, va_list a_list) {
                     write_u32_hex(va_arg(a_list, u32), true);
                 } else if (c == 'x') {
                     write_u32_hex(va_arg(a_list, u32), false);
+                } else if (c == 'p') {
+                    void *value = va_arg(a_list, void *);
+                    if (sizeof(void *) == sizeof(u32)) {
+                        write_u32_hex(reinterpret_cast<u32>(value), true);
+                    } else if (sizeof(void *) == sizeof(u64)) {
+                        write_u64_hex(reinterpret_cast<u64>(value), true);
+                    }
                 } else {
                     // @TODO
                     write(c);
@@ -77,6 +84,11 @@ void Vga::print(String fmt, ...) {
     va_start(a_list, fmt);
     print_valist(fmt, a_list);
     va_end(a_list);
+}
+
+void Vga::write_u64_hex(u64 value, bool upper) {
+    write_u32_hex((value >> 32) & 0xFFFFFFFF, upper);
+    write_u32_hex(value & 0xFFFFFFFF, upper);
 }
 
 void Vga::write_u32_hex(u32 value, bool upper) {
