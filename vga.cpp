@@ -61,6 +61,9 @@ void Vga::print_valist(String fmt, va_list a_list) {
                     write_u32_hex(va_arg(a_list, u32), false);
                 } else if (c == 'p') {
                     void *value = va_arg(a_list, void *);
+
+                    write('0');
+                    write('x');
                     if (sizeof(void *) == sizeof(u32)) {
                         write_u32_hex(reinterpret_cast<u32>(value), true);
                     } else if (sizeof(void *) == sizeof(u64)) {

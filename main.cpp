@@ -452,6 +452,9 @@ void encode_gdt_entry(u64 *gdt_entry, u32 base, u32 limit, u8 type) {
 #define PIC1_DATA 0x21
 #define PIC2_DATA 0xA1
 
+#define PIC_READ_IRR 0x0A;
+#define PIC_READ_ISR 0x0B
+
 void pic_set_eoi(u8 irq) {
     if (irq >= 0x28) _port_io_write_u8(PIC2, 0x20);
     _port_io_write_u8(PIC1, 0x20);
@@ -495,6 +498,13 @@ void clear_irq_mask(u8 irq_line) {
     
     u8 value = _port_io_read_u8(port) & ~(1 << irq_line);
     _port_io_write_u8(port, value);
+}
+
+
+u16 pic_get_isr() {
+    _port_io_write_u8(PIC1, PIC_READ_ISR);
+    _port_io_write_u8(PIC2, PIC_READ_ISR);
+    return (_port_io_read_u8(PIC2) << 8) | _port_io_read_u8(PIC1);
 }
 
 extern "C"

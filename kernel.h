@@ -89,4 +89,6 @@ void _io_wait();
 
 void pic_set_eoi(u8 irq);
 
+u16 pic_get_isr();
+
 #endif // KERNEL_H
