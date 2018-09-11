@@ -533,7 +533,116 @@ u16 pic_get_isr() {
 #define PS2_CMD_READ_OUTPUT_PORT  0xD0
 #define PS2_CMD_WRITE_OUTPUT_PORT 0xD1
 
+#define PS2_CONFIG_PORT_1_INTERRUPT_BIT   (1 << 0)
+#define PS2_CONFIG_PORT_2_INTERRUPT_BIT   (1 << 1)
+#define PS2_CONFIG_SYSTEM_FLAG_BIT        (1 << 2)
+#define PS2_CONFIG_PORT_1_CLOCK_BIT       (1 << 4)
+#define PS2_CONFIG_PORT_2_CLOCK_BIT       (1 << 5)
+#define PS2_CONFIG_PORT_1_TRANSLATION_BIT (1 << 6)
 
+struct {
+    int num_channels;
+} ps2_info;
+
+void ps2_wait_for_response() {
+    while (true) {
+        u8 data = _port_io_read_u8(PS2_STATUS);
+        if (data & PS2_STATUS_OUTPUT_BUFFER_BIT) break;
+    }
+}
+
+void ps2_wait_for_input_ready() {
+    while (true) {
+        u8 data = _port_io_read_u8(PS2_STATUS);
+        if (!(data & PS2_STATUS_INPUT_BUFFER_BIT)) break;
+    }
+}
+
+// WARNING: this should be called only after disabling the PS/2 devices, otherwise we can get stuck if the PS/2 devices keep filling the buffers
+void ps2_flush_output_buffers() {
+    while (_port_io_read_u8(PS2_STATUS) & PS2_STATUS_OUTPUT_BUFFER_BIT)
+        _port_io_read_u8(PS2_DATA);
+}
+
+void ps2_disable_devices() {
+    // do we need to _io_wait when interfacing the PS/2?
+    _port_io_write_u8(PS2_COMMAND, PS2_CMD_PORT_1_DISABLE); _io_wait();
+    _port_io_write_u8(PS2_COMMAND, PS2_CMD_PORT_2_DISABLE); _io_wait();
+}
+
+void ps2_enable_devices() {
+    _port_io_write_u8(PS2_COMMAND, PS2_CMD_PORT_1_ENABLE); _io_wait();
+    _port_io_write_u8(PS2_COMMAND, PS2_CMD_PORT_2_ENABLE); _io_wait();
+}
+
+void ps2_initialize() {
+    ps2_disable_devices();
+    ps2_flush_output_buffers();
+
+    _port_io_write_u8(PS2_COMMAND, PS2_CMD_READ_BYTE0);
+    ps2_wait_for_response();
+    u8 config_byte = _port_io_read_u8(PS2_DATA);
+    kprint("Config: 0x%X\n", config_byte);
+    // disable interrupts and port scancode set translation
+    config_byte &= ~(PS2_CONFIG_PORT_1_INTERRUPT_BIT | PS2_CONFIG_PORT_2_INTERRUPT_BIT | PS2_CONFIG_PORT_1_TRANSLATION_BIT);
+
+    if (config_byte & PS2_CONFIG_PORT_2_CLOCK_BIT) {
+        ps2_info.num_channels = 2;
+    } else {
+        // this is an assumption but the osdev docs seem to indicate that unless your system doesnt have a PS/2 controller, then
+        // port 1 is always active (unless the device is disconnected, maybe)
+        ps2_info.num_channels = 1;
+    }
+
+    _io_wait();
+    _port_io_write_u8(PS2_COMMAND, PS2_CMD_WRITE_BYTE0);
+    ps2_wait_for_input_ready();
+    _port_io_write_u8(PS2_DATA, config_byte);
+    ps2_wait_for_input_ready();
+
+    _port_io_write_u8(PS2_COMMAND, PS2_CMD_CONTROLLER_TEST);
+    ps2_wait_for_response();
+    u8 response = _port_io_read_u8(PS2_DATA);
+    if (response != 0x55) {
+        kprint("response: %X\n", response);
+        kassert(false);
+    }
+
+    // @TODO maybe do a more thorough test for dual channel support
+
+    _port_io_write_u8(PS2_COMMAND, PS2_CMD_PORT_1_TEST);
+    ps2_wait_for_response();
+    response = _port_io_read_u8(PS2_DATA);
+    kprint("response: %X\n", response);
+    kassert(response == 0x00);
+
+    config_byte |= (PS2_CONFIG_PORT_1_INTERRUPT_BIT | PS2_CONFIG_PORT_2_INTERRUPT_BIT);
+    _port_io_write_u8(PS2_COMMAND, PS2_CMD_WRITE_BYTE0);
+    ps2_wait_for_input_ready();
+    _port_io_write_u8(PS2_DATA, config_byte);
+
+    _io_wait();
+    ps2_enable_devices();
+
+    ps2_wait_for_input_ready();
+    _port_io_write_u8(PS2_DATA, 0xFF);
+    ps2_wait_for_response();
+    response = _port_io_read_u8(PS2_DATA);
+
+    // The osdev wiki authors seem unsure what the actual behavio is here (getting 0xFA then 0xAA or vice versa)
+    kassert(response == 0xFA);
+    response = _port_io_read_u8(PS2_DATA);
+    if (response != 0xAA) {
+        kprint("response: %X\n", response);
+        kassert(false);
+    }
+
+    if (ps2_info.num_channels == 2) {
+        // @TODO test second port
+    }
+
+
+}
 
 extern "C"
 void kernel_main(Multiboot_Information *info) {
@@ -557,6 +666,9 @@ void kernel_main(Multiboot_Information *info) {
     kprint("Setting up IDT...");
     init_interrupt_descriptor_table();
     pic_remap(0x20, 0x28);
+
+    ps2_initialize();
+
     asm("sti");
     kprint("done\n");
 

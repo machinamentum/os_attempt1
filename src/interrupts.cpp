@@ -225,9 +225,47 @@ void __irq_0x20_handler(void *arg) {
     pic_set_eoi(0x20);
 }
 
+#define PS2_DATA    0x60
+#define PS2_STATUS  0x64
+#define PS2_COMMAND 0x64
+
+#define PS2_STATUS_OUTPUT_BUFFER_BIT (1 << 0)
+#define PS2_STATUS_INPUT_BUFFER_BIT  (1 << 1)
+#define PS2_STATUS_SYSTEM_FLAG_BIT   (1 << 2)
+#define PS2_STATUS_COMMAND_DATA_BIT  (1 << 3)
+#define PS2_STATUS_TIMEOUT_ERROR_BIT (1 << 6)
+#define PS2_STATUS_PARITY_ERROR_BIT  (1 << 7)
+
+#define PS2_INTERNAL_RAM_SIZE 0x20
+#define PS2_CMD_READ_BYTE0     0x20
+#define PS2_CMD_WRITE_BYTE0    0x60
+#define PS2_CMD_PORT_2_DISABLE 0xA7
+#define PS2_CMD_PORT_2_ENABLE  0xA8
+#define PS2_CMD_PORT_2_TEST    0xA9
+#define PS2_CMD_CONTROLLER_TEST 0xAA
+
+#define PS2_CMD_PORT_1_DISABLE 0xAD
+#define PS2_CMD_PORT_1_ENABLE  0xAE
+#define PS2_CMD_PORT_1_TEST    0xAB
+
+#define PS2_CMD_READ_OUTPUT_PORT  0xD0
+#define PS2_CMD_WRITE_OUTPUT_PORT 0xD1
+
+#define PS2_CONFIG_PORT_1_INTERRUPT_BIT   (1 << 0)
+#define PS2_CONFIG_PORT_2_INTERRUPT_BIT   (1 << 1)
+#define PS2_CONFIG_SYSTEM_FLAG_BIT        (1 << 2)
+#define PS2_CONFIG_PORT_1_CLOCK_BIT       (1 << 4)
+#define PS2_CONFIG_PORT_2_CLOCK_BIT       (1 << 5)
+#define PS2_CONFIG_PORT_1_TRANSLATION_BIT (1 << 6)
+
+
 __attribute__((interrupt))
 void __irq_0x21_handler(void *arg) {
     UNUSED(arg);
+
+    u8 scancode = _port_io_read_u8(PS2_DATA);
+
+    kprint("KEYBOARD: %c\n", scancode & 0x7F);
 
     pic_set_eoi(0x21);
 }
