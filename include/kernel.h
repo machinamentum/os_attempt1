@@ -91,4 +91,93 @@ void pic_set_eoi(u8 irq);
 
 u16 pic_get_isr();
 
+#define PS2_DATA    0x60
+#define PS2_STATUS  0x64
+#define PS2_COMMAND 0x64
+
+#define PS2_STATUS_OUTPUT_BUFFER_BIT (1 << 0)
+#define PS2_STATUS_INPUT_BUFFER_BIT  (1 << 1)
+#define PS2_STATUS_SYSTEM_FLAG_BIT   (1 << 2)
+#define PS2_STATUS_COMMAND_DATA_BIT  (1 << 3)
+#define PS2_STATUS_TIMEOUT_ERROR_BIT (1 << 6)
+#define PS2_STATUS_PARITY_ERROR_BIT  (1 << 7)
+
+#define PS2_INTERNAL_RAM_SIZE 0x20
+#define PS2_CMD_READ_BYTE0     0x20
+#define PS2_CMD_WRITE_BYTE0    0x60
+#define PS2_CMD_PORT_2_DISABLE 0xA7
+#define PS2_CMD_PORT_2_ENABLE  0xA8
+#define PS2_CMD_PORT_2_TEST    0xA9
+#define PS2_CMD_CONTROLLER_TEST 0xAA
+
+#define PS2_CMD_PORT_1_DISABLE 0xAD
+#define PS2_CMD_PORT_1_ENABLE  0xAE
+#define PS2_CMD_PORT_1_TEST    0xAB
+
+#define PS2_CMD_READ_OUTPUT_PORT  0xD0
+#define PS2_CMD_WRITE_OUTPUT_PORT 0xD1
+
+#define PS2_CONFIG_PORT_1_INTERRUPT_BIT   (1 << 0)
+#define PS2_CONFIG_PORT_2_INTERRUPT_BIT   (1 << 1)
+#define PS2_CONFIG_SYSTEM_FLAG_BIT        (1 << 2)
+#define PS2_CONFIG_PORT_1_CLOCK_BIT       (1 << 4)
+#define PS2_CONFIG_PORT_2_CLOCK_BIT       (1 << 5)
+#define PS2_CONFIG_PORT_1_TRANSLATION_BIT (1 << 6)
+
+void ps2_wait_for_response();
+void ps2_wait_for_output_clear();
+void ps2_wait_for_input_ready();
+
+#include "heap.h"
+
+enum ALLOCATOR_MODE {
+    FREE,
+    ALLOC,
+};
+
+typedef void *(*allocator_type)(ALLOCATOR_MODE, void *existing, s64 size);
+
+template <typename T>
+struct Array {
+    T *data = nullptr;
+    s64 count = 0;
+    s64 allocated = 0;
+    allocator_type allocator = nullptr;
+
+    T &operator [](s64 index) {
+        kassert(index >= 0 && index < count);
+        return data[index];
+    }
+
+    void reserve(s64 size) {
+        if (size > allocated) {
+        	if (size < 32) size = 32;
+
+            T *ndata;
+            if (allocator) ndata = reinterpret_cast<T *>(allocator(ALLOC, nullptr, size * sizeof(T)));
+            else ndata = reinterpret_cast<T *>(heap_alloc(size * sizeof(T)));
+            memcpy(ndata, data, count * sizeof(T));
+            if (allocator) allocator(FREE, data, 0);
+            data = ndata;
+            allocated = size;
+        }
+    }
+
+    void resize(s64 size) {
+        reserve(size);
+
+        count = size;
+    }
+
+    void add(T item) {
+    	resize(count+1);
+    	data[count-1] = item;
+    }
+
+    void clear() {
+    	count = 0;
+    }
+};
+
+
 #endif // KERNEL_H

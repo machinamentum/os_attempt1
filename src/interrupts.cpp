@@ -225,138 +225,7 @@ void __irq_0x20_handler(void *arg) {
     pic_set_eoi(0x20);
 }
 
-#define PS2_DATA    0x60
-#define PS2_STATUS  0x64
-#define PS2_COMMAND 0x64
-
-#define PS2_STATUS_OUTPUT_BUFFER_BIT (1 << 0)
-#define PS2_STATUS_INPUT_BUFFER_BIT  (1 << 1)
-#define PS2_STATUS_SYSTEM_FLAG_BIT   (1 << 2)
-#define PS2_STATUS_COMMAND_DATA_BIT  (1 << 3)
-#define PS2_STATUS_TIMEOUT_ERROR_BIT (1 << 6)
-#define PS2_STATUS_PARITY_ERROR_BIT  (1 << 7)
-
-#define PS2_INTERNAL_RAM_SIZE 0x20
-#define PS2_CMD_READ_BYTE0     0x20
-#define PS2_CMD_WRITE_BYTE0    0x60
-#define PS2_CMD_PORT_2_DISABLE 0xA7
-#define PS2_CMD_PORT_2_ENABLE  0xA8
-#define PS2_CMD_PORT_2_TEST    0xA9
-#define PS2_CMD_CONTROLLER_TEST 0xAA
-
-#define PS2_CMD_PORT_1_DISABLE 0xAD
-#define PS2_CMD_PORT_1_ENABLE  0xAE
-#define PS2_CMD_PORT_1_TEST    0xAB
-
-#define PS2_CMD_READ_OUTPUT_PORT  0xD0
-#define PS2_CMD_WRITE_OUTPUT_PORT 0xD1
-
-#define PS2_CONFIG_PORT_1_INTERRUPT_BIT   (1 << 0)
-#define PS2_CONFIG_PORT_2_INTERRUPT_BIT   (1 << 1)
-#define PS2_CONFIG_SYSTEM_FLAG_BIT        (1 << 2)
-#define PS2_CONFIG_PORT_1_CLOCK_BIT       (1 << 4)
-#define PS2_CONFIG_PORT_2_CLOCK_BIT       (1 << 5)
-#define PS2_CONFIG_PORT_1_TRANSLATION_BIT (1 << 6)
-
-#define KEY_PRESS        1
-#define KEY_RELEASE      2
-#define KEY_REPEAT       3
-
-#define KEYCODE_UNDEFINED 0xFFFFFFFF
-
-#define KEYCODE_ESCAPE   27
-
-#define KEYCODE_SPACE    ' '
-
-#define KEYCODE_SINGLE_QUOTE 39
-
-#define KEYCODE_COMMA    ','
-#define KEYCODE_MINUS    '-'
-#define KEYCODE_PERIOD   '.'
-#define KEYCODE_EQUALS   '='
-#define KEYCODE_FORWARD_SLASH '/'
-#define KEYCODE_0        '0'
-#define KEYCODE_1        '1'
-#define KEYCODE_2        '2'
-#define KEYCODE_3        '3'
-#define KEYCODE_4        '4'
-#define KEYCODE_5        '5'
-#define KEYCODE_6        '6'
-#define KEYCODE_7        '7'
-#define KEYCODE_8        '8'
-#define KEYCODE_9        '9'
-
-#define KEYCODE_SEMICOLON ';'
-
-#define KEYCODE_A        'A'
-#define KEYCODE_B        'B'
-#define KEYCODE_C        'C'
-#define KEYCODE_D        'D'
-#define KEYCODE_E        'E'
-#define KEYCODE_F        'F'
-#define KEYCODE_G        'G'
-#define KEYCODE_H        'H'
-#define KEYCODE_I        'I'
-#define KEYCODE_J        'J'
-#define KEYCODE_K        'K'
-#define KEYCODE_L        'L'
-#define KEYCODE_M        'M'
-#define KEYCODE_N        'N'
-#define KEYCODE_O        'O'
-#define KEYCODE_P        'P'
-#define KEYCODE_Q        'Q'
-#define KEYCODE_R        'R'
-#define KEYCODE_S        'S'
-#define KEYCODE_T        'T'
-#define KEYCODE_U        'U'
-#define KEYCODE_V        'V'
-#define KEYCODE_W        'W'
-#define KEYCODE_X        'X'
-#define KEYCODE_Y        'Y'
-#define KEYCODE_Z        'Z'
-#define KEYCODE_LEFT_BRACKET '['
-#define KEYCODE_BACKSLASH    '\\'
-#define KEYCODE_RIGHT_BRACKET ']'
-#define KEYCODE_BACKTICK  96
-
-#define KEYCODE_BACKSPACE 127
-
-#define ASCII_EXTENDED_BLOCK 219
-
-#define KEYCODE_F1        256
-#define KEYCODE_F2        257
-#define KEYCODE_F3        258
-#define KEYCODE_F4        259
-#define KEYCODE_F5        260
-#define KEYCODE_F6        261
-#define KEYCODE_F7        262
-#define KEYCODE_F8        263
-#define KEYCODE_F9        264
-#define KEYCODE_F10       265
-#define KEYCODE_F11       266
-#define KEYCODE_F12       267
-#define KEYCODE_TAB       268
-#define KEYCODE_LEFT_ALT     269
-#define KEYCODE_LEFT_SHIFT   270
-#define KEYCODE_LEFT_CONTROL 271
-#define KEYCODE_NUMPAD_0     272
-#define KEYCODE_NUMPAD_1     273
-#define KEYCODE_NUMPAD_2     274
-#define KEYCODE_NUMPAD_3     275
-#define KEYCODE_NUMPAD_4     276
-#define KEYCODE_NUMPAD_5     277
-#define KEYCODE_NUMPAD_6     278
-#define KEYCODE_NUMPAD_7     279
-#define KEYCODE_NUMPAD_8     280
-#define KEYCODE_NUMPAD_9     281
-#define KEYCODE_NUMPAD_PLUS  282
-#define KEYCODE_NUMPAD_ASTERISK 283
-#define KEYCODE_NUMPAD_MINUS 284
-#define KEYCODE_CAPS_LOCK    285
-#define KEYCODE_SCROLL_LOCK  286
-#define KEYCODE_RIGHT_SHIFT  287
-#define KEYCODE_ENTER        288
-#define KEYCODE_NUMBER_LOCK  289
+#include "keyboard.h"
 
 u32 scancode_set2_table[] = {
     KEYCODE_UNDEFINED,
@@ -493,13 +362,20 @@ u32 scancode_set2_table[] = {
     KEYCODE_F7,
 };
 
-u32 buffer_count = 0;
-u8 buffer[255];
+u8 _shift_pressed = 0;
+u8 _ctrl_pressed = 0;
+
+Array<Input> keyboard_event_queue;
 
 u8 get_ascii_representable_character(u32 keycode, bool shift_pressed) {
     if (keycode >= 0x20 && keycode < 0x7F) {
         if (keycode >= KEYCODE_A && keycode <= KEYCODE_Z) {
-            if (shift_pressed) return static_cast<u8>(keycode + 0x20);
+            if (!shift_pressed) return static_cast<u8>(keycode + 0x20);
+        }
+
+        if (keycode >= KEYCODE_0 && keycode <= KEYCODE_9) {
+            u8 value = static_cast<u8>(keycode - KEYCODE_0);
+            if (shift_pressed) return ")!@#$%^&*("[value];
         }
 
         return static_cast<u8>(keycode);
@@ -510,18 +386,14 @@ u8 get_ascii_representable_character(u32 keycode, bool shift_pressed) {
         return KEYCODE_0 + value;
     }
 
+    if (keycode == KEYCODE_ENTER) return '\n';
+
     return ASCII_EXTENDED_BLOCK;
 }
-
-void ps2_wait_for_output_clear();
 
 __attribute__((interrupt))
 void __irq_0x21_handler(void *arg) {
     UNUSED(arg);
-    asm("cli");
-    void set_irq_mask(u8 irq_line);
-    void clear_irq_mask(u8 irq_line);
-    set_irq_mask(1);
 
     if (_port_io_read_u8(PS2_STATUS) & PS2_STATUS_OUTPUT_BUFFER_BIT) {
         u8 scancode = _port_io_read_u8(PS2_DATA); _io_wait();
@@ -541,13 +413,29 @@ void __irq_0x21_handler(void *arg) {
 
         if (scancode >= 0x84) kprint("SCANCODE: %X\n", scancode);
         else {
-            u8 ascii = get_ascii_representable_character(scancode_set2_table[scancode], false);
-            kprint("KEYBOARD: action: %d, char: %c\n", action, ascii);
-            // if (buffer_count < 255) buffer[buffer_count++] = ascii;
+            u32 keycode = scancode_set2_table[scancode];
+            if (keycode == KEYCODE_LEFT_CONTROL || keycode == KEYCODE_RIGHT_CONTROL) {
+                _ctrl_pressed = action;
+            } else if (keycode == KEYCODE_LEFT_SHIFT || keycode == KEYCODE_RIGHT_SHIFT) {
+                _shift_pressed = action;
+            } else {
+                u8 ascii = get_ascii_representable_character(keycode, _shift_pressed == KEY_PRESS);
+                // kprint("KEYBOARD: action: %d, char: %c\n", action, ascii);
+                // if (buffer_count < 255) buffer[buffer_count++] = ascii;
+                {
+                    Input i;
+                    i.shift_pressed = _shift_pressed;
+                    i.ctrl_pressed = _ctrl_pressed;
+                    i.action = action;
+                    i.keycode = keycode;
+                    i.utf8_code[0] = ascii; // @Hack @FixMe
+
+                    keyboard_event_queue.add(i);
+                }
+            }
         }
     }
 
-    clear_irq_mask(1);
     pic_set_eoi(0x21);
 }
 

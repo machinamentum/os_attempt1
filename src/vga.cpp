@@ -142,6 +142,8 @@ void Vga::write(u8 c) {
         if (buffer_cursor_pos_y >= VGA_HEGIHT) {
             scroll_one_line();
         }
+
+        set_cursor_coordinates(buffer_cursor_pos_x, buffer_cursor_pos_y);
         return;
     }
     u64 index = buffer_cursor_pos_x + VGA_WIDTH * buffer_cursor_pos_y;
