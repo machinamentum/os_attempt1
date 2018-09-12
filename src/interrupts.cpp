@@ -523,26 +523,28 @@ void __irq_0x21_handler(void *arg) {
     void clear_irq_mask(u8 irq_line);
     set_irq_mask(1);
 
-    u8 scancode = _port_io_read_u8(PS2_DATA); _io_wait();
+    if (_port_io_read_u8(PS2_STATUS) & PS2_STATUS_OUTPUT_BUFFER_BIT) {
+        u8 scancode = _port_io_read_u8(PS2_DATA); _io_wait();
 
-    u8 action = KEY_PRESS;
-    if (scancode == 0xF0) {
-        action = KEY_RELEASE;
-        // @TODO maybe wait here?
-        scancode = _port_io_read_u8(PS2_DATA); _io_wait();
-    } else if (scancode == 0xE0) {
-        kassert(false);
-    }
+        u8 action = KEY_PRESS;
+        if (scancode == 0xF0) {
+            action = KEY_RELEASE;
+            // @TODO maybe wait here?
+            scancode = _port_io_read_u8(PS2_DATA); _io_wait();
+        } else if (scancode == 0xE0) {
+            kassert(false);
+        }
 
-    u8 temp = _port_io_read_u8(0x61);
-    _port_io_write_u8(0x61, temp | 0x80); _io_wait();
-    _port_io_write_u8(0x61, temp); _io_wait();
+        u8 temp = _port_io_read_u8(0x61);
+        _port_io_write_u8(0x61, temp | 0x80); _io_wait();
+        _port_io_write_u8(0x61, temp); _io_wait();
 
-    if (scancode >= 0x84) kprint("SCANCODE: %X\n", scancode);
-    else {
-        u8 ascii = get_ascii_representable_character(scancode_set2_table[scancode], false);
-        kprint("KEYBOARD: action: %d, char: %c\n", action, ascii);
-        // if (buffer_count < 255) buffer[buffer_count++] = ascii;
+        if (scancode >= 0x84) kprint("SCANCODE: %X\n", scancode);
+        else {
+            u8 ascii = get_ascii_representable_character(scancode_set2_table[scancode], false);
+            kprint("KEYBOARD: action: %d, char: %c\n", action, ascii);
+            // if (buffer_count < 255) buffer[buffer_count++] = ascii;
+        }
     }
 
     clear_irq_mask(1);

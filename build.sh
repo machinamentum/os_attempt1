@@ -1,6 +1,6 @@
 SCRIPTPATH="$( cd "$(dirname "$0")" ; pwd -P )"
 export PATH="$SCRIPTPATH/toolchain/bin:$PATH"
-nasm -felf32 boot.s -o boot.o
+nasm -felf32 src/boot.s -o boot.o
 
 INCLUDE_PATHS=-Iinclude
 COMMON_FLAGS="$INCLUDE_PATHS -std=c++11 -ffreestanding -O2 -Wall -Wextra -Wno-write-strings -funsigned-char"
