@@ -551,6 +551,10 @@ void ps2_wait_for_response() {
     }
 }
 
+void ps2_wait_for_output_clear() {
+    while(_port_io_read_u8(PS2_STATUS) & PS2_STATUS_OUTPUT_BUFFER_BIT) ;
+}
+
 void ps2_wait_for_input_ready() {
     while (true) {
         u8 data = _port_io_read_u8(PS2_STATUS);
@@ -576,6 +580,7 @@ void ps2_enable_devices() {
 }
 
 void ps2_initialize() {
+    set_irq_mask(1);
     ps2_disable_devices();
     ps2_flush_output_buffers();
 
@@ -621,7 +626,7 @@ void ps2_initialize() {
     ps2_wait_for_input_ready();
     _port_io_write_u8(PS2_DATA, config_byte);
 
-    _io_wait();
+    ps2_wait_for_input_ready();
     ps2_enable_devices();
 
     ps2_wait_for_input_ready();
@@ -631,7 +636,9 @@ void ps2_initialize() {
 
     // The osdev wiki authors seem unsure what the actual behavio is here (getting 0xFA then 0xAA or vice versa)
     kassert(response == 0xFA);
+    ps2_wait_for_response();
     response = _port_io_read_u8(PS2_DATA);
+    kassert(response == 0xAA);
     if (response != 0xAA) {
         kprint("response: %X\n", response);
         kassert(false);
@@ -641,11 +648,22 @@ void ps2_initialize() {
         // @TODO test second port
     }
 
+    ps2_wait_for_input_ready();
+    _port_io_write_u8(PS2_DATA, 0xF3);
+    ps2_wait_for_input_ready();
+    _port_io_write_u8(PS2_DATA, 0b11111 | (0b11 << 5));
+    ps2_wait_for_response();
+    response = _port_io_read_u8(PS2_DATA);
+    kassert(response == 0xFA);
 
+    clear_irq_mask(1);
 }
 
 extern "C"
 void kernel_main(Multiboot_Information *info) {
+    asm("cli");
+    _port_io_write_u8(PIC1_DATA, 0xFF); _io_wait();
+    _port_io_write_u8(PIC2_DATA, 0xFF); _io_wait();
     upper_memory_size_pages = info->mem_upper / 4; // convert KB to pages (4096 byte blocks)
     vga = Vga();
     
@@ -668,9 +686,8 @@ void kernel_main(Multiboot_Information *info) {
     pic_remap(0x20, 0x28);
 
     ps2_initialize();
-
-    asm("sti");
     kprint("done\n");
+    asm("sti");
 
     page_allocator_init();
     init_heap();

@@ -258,15 +258,294 @@ void __irq_0x20_handler(void *arg) {
 #define PS2_CONFIG_PORT_2_CLOCK_BIT       (1 << 5)
 #define PS2_CONFIG_PORT_1_TRANSLATION_BIT (1 << 6)
 
+#define KEY_PRESS        1
+#define KEY_RELEASE      2
+#define KEY_REPEAT       3
+
+#define KEYCODE_UNDEFINED 0xFFFFFFFF
+
+#define KEYCODE_ESCAPE   27
+
+#define KEYCODE_SPACE    ' '
+
+#define KEYCODE_SINGLE_QUOTE 39
+
+#define KEYCODE_COMMA    ','
+#define KEYCODE_MINUS    '-'
+#define KEYCODE_PERIOD   '.'
+#define KEYCODE_EQUALS   '='
+#define KEYCODE_FORWARD_SLASH '/'
+#define KEYCODE_0        '0'
+#define KEYCODE_1        '1'
+#define KEYCODE_2        '2'
+#define KEYCODE_3        '3'
+#define KEYCODE_4        '4'
+#define KEYCODE_5        '5'
+#define KEYCODE_6        '6'
+#define KEYCODE_7        '7'
+#define KEYCODE_8        '8'
+#define KEYCODE_9        '9'
+
+#define KEYCODE_SEMICOLON ';'
+
+#define KEYCODE_A        'A'
+#define KEYCODE_B        'B'
+#define KEYCODE_C        'C'
+#define KEYCODE_D        'D'
+#define KEYCODE_E        'E'
+#define KEYCODE_F        'F'
+#define KEYCODE_G        'G'
+#define KEYCODE_H        'H'
+#define KEYCODE_I        'I'
+#define KEYCODE_J        'J'
+#define KEYCODE_K        'K'
+#define KEYCODE_L        'L'
+#define KEYCODE_M        'M'
+#define KEYCODE_N        'N'
+#define KEYCODE_O        'O'
+#define KEYCODE_P        'P'
+#define KEYCODE_Q        'Q'
+#define KEYCODE_R        'R'
+#define KEYCODE_S        'S'
+#define KEYCODE_T        'T'
+#define KEYCODE_U        'U'
+#define KEYCODE_V        'V'
+#define KEYCODE_W        'W'
+#define KEYCODE_X        'X'
+#define KEYCODE_Y        'Y'
+#define KEYCODE_Z        'Z'
+#define KEYCODE_LEFT_BRACKET '['
+#define KEYCODE_BACKSLASH    '\\'
+#define KEYCODE_RIGHT_BRACKET ']'
+#define KEYCODE_BACKTICK  96
+
+#define KEYCODE_BACKSPACE 127
+
+#define ASCII_EXTENDED_BLOCK 219
+
+#define KEYCODE_F1        256
+#define KEYCODE_F2        257
+#define KEYCODE_F3        258
+#define KEYCODE_F4        259
+#define KEYCODE_F5        260
+#define KEYCODE_F6        261
+#define KEYCODE_F7        262
+#define KEYCODE_F8        263
+#define KEYCODE_F9        264
+#define KEYCODE_F10       265
+#define KEYCODE_F11       266
+#define KEYCODE_F12       267
+#define KEYCODE_TAB       268
+#define KEYCODE_LEFT_ALT     269
+#define KEYCODE_LEFT_SHIFT   270
+#define KEYCODE_LEFT_CONTROL 271
+#define KEYCODE_NUMPAD_0     272
+#define KEYCODE_NUMPAD_1     273
+#define KEYCODE_NUMPAD_2     274
+#define KEYCODE_NUMPAD_3     275
+#define KEYCODE_NUMPAD_4     276
+#define KEYCODE_NUMPAD_5     277
+#define KEYCODE_NUMPAD_6     278
+#define KEYCODE_NUMPAD_7     279
+#define KEYCODE_NUMPAD_8     280
+#define KEYCODE_NUMPAD_9     281
+#define KEYCODE_NUMPAD_PLUS  282
+#define KEYCODE_NUMPAD_ASTERISK 283
+#define KEYCODE_NUMPAD_MINUS 284
+#define KEYCODE_CAPS_LOCK    285
+#define KEYCODE_SCROLL_LOCK  286
+#define KEYCODE_RIGHT_SHIFT  287
+#define KEYCODE_ENTER        288
+#define KEYCODE_NUMBER_LOCK  289
+
+u32 scancode_set2_table[] = {
+    KEYCODE_UNDEFINED,
+    KEYCODE_F9,
+    KEYCODE_UNDEFINED,
+    KEYCODE_F5,
+    KEYCODE_F3,
+    KEYCODE_F1,
+    KEYCODE_F2,
+    KEYCODE_F12,
+    KEYCODE_UNDEFINED,
+    KEYCODE_F10,
+    KEYCODE_F8,
+    KEYCODE_F6,
+    KEYCODE_F4,
+    KEYCODE_TAB,
+    KEYCODE_BACKTICK,
+    KEYCODE_UNDEFINED,
+    KEYCODE_UNDEFINED,
+    KEYCODE_LEFT_ALT,
+    KEYCODE_LEFT_SHIFT,
+    KEYCODE_UNDEFINED,
+    KEYCODE_LEFT_CONTROL,
+    KEYCODE_Q,
+    KEYCODE_1,
+    KEYCODE_UNDEFINED,
+    KEYCODE_UNDEFINED,
+    KEYCODE_UNDEFINED,
+    KEYCODE_Z,
+    KEYCODE_S,
+    KEYCODE_A,
+    KEYCODE_W,
+    KEYCODE_2,
+    KEYCODE_UNDEFINED,
+    KEYCODE_UNDEFINED,
+    KEYCODE_C,
+    KEYCODE_X,
+    KEYCODE_D,
+    KEYCODE_E,
+    KEYCODE_4,
+    KEYCODE_3,
+    KEYCODE_UNDEFINED,
+    KEYCODE_UNDEFINED,
+    KEYCODE_SPACE,
+    KEYCODE_V,
+    KEYCODE_F,
+    KEYCODE_T,
+    KEYCODE_R,
+    KEYCODE_5,
+    KEYCODE_UNDEFINED,
+    KEYCODE_UNDEFINED,
+    KEYCODE_N,
+    KEYCODE_B,
+    KEYCODE_H,
+    KEYCODE_G,
+    KEYCODE_Y,
+    KEYCODE_6,
+    KEYCODE_UNDEFINED,
+    KEYCODE_UNDEFINED,
+    KEYCODE_UNDEFINED,
+    KEYCODE_M,
+    KEYCODE_J,
+    KEYCODE_U,
+    KEYCODE_7,
+    KEYCODE_8,
+    KEYCODE_UNDEFINED,
+    KEYCODE_UNDEFINED,
+    KEYCODE_COMMA,
+    KEYCODE_K,
+    KEYCODE_I,
+    KEYCODE_O,
+    KEYCODE_0,
+    KEYCODE_9,
+    KEYCODE_UNDEFINED,
+    KEYCODE_UNDEFINED,
+    KEYCODE_PERIOD,
+    KEYCODE_FORWARD_SLASH,
+    KEYCODE_L,
+    KEYCODE_SEMICOLON,
+    KEYCODE_P,
+    KEYCODE_MINUS,
+    KEYCODE_UNDEFINED,
+    KEYCODE_UNDEFINED,
+    KEYCODE_UNDEFINED,
+    KEYCODE_SINGLE_QUOTE,
+    KEYCODE_UNDEFINED,
+    KEYCODE_LEFT_BRACKET,
+    KEYCODE_EQUALS,
+    KEYCODE_UNDEFINED,
+    KEYCODE_UNDEFINED,
+    KEYCODE_CAPS_LOCK,
+    KEYCODE_RIGHT_SHIFT,
+    KEYCODE_ENTER,
+    KEYCODE_RIGHT_BRACKET,
+    KEYCODE_UNDEFINED,
+    KEYCODE_BACKSLASH,
+    KEYCODE_UNDEFINED,
+    KEYCODE_UNDEFINED,
+    KEYCODE_UNDEFINED,
+    KEYCODE_UNDEFINED,
+    KEYCODE_UNDEFINED,
+    KEYCODE_UNDEFINED,
+    KEYCODE_UNDEFINED,
+    KEYCODE_UNDEFINED,
+    KEYCODE_BACKSPACE,
+    KEYCODE_UNDEFINED,
+    KEYCODE_UNDEFINED,
+    KEYCODE_NUMPAD_1,
+    KEYCODE_UNDEFINED,
+    KEYCODE_NUMPAD_4,
+    KEYCODE_NUMPAD_7,
+    KEYCODE_UNDEFINED,
+    KEYCODE_UNDEFINED,
+    KEYCODE_UNDEFINED,
+    KEYCODE_NUMPAD_0,
+    KEYCODE_PERIOD,
+    KEYCODE_NUMPAD_2,
+    KEYCODE_NUMPAD_5,
+    KEYCODE_NUMPAD_6,
+    KEYCODE_NUMPAD_8,
+    KEYCODE_ESCAPE,
+    KEYCODE_NUMBER_LOCK,
+    KEYCODE_F11,
+    KEYCODE_NUMPAD_PLUS,
+    KEYCODE_NUMPAD_3,
+    KEYCODE_NUMPAD_MINUS,
+    KEYCODE_NUMPAD_ASTERISK,
+    KEYCODE_NUMPAD_9,
+    KEYCODE_SCROLL_LOCK,
+    KEYCODE_UNDEFINED,
+    KEYCODE_UNDEFINED,
+    KEYCODE_UNDEFINED,
+    KEYCODE_UNDEFINED,
+    KEYCODE_F7,
+};
+
+u32 buffer_count = 0;
+u8 buffer[255];
+
+u8 get_ascii_representable_character(u32 keycode, bool shift_pressed) {
+    if (keycode >= 0x20 && keycode < 0x7F) {
+        if (keycode >= KEYCODE_A && keycode <= KEYCODE_Z) {
+            if (shift_pressed) return static_cast<u8>(keycode + 0x20);
+        }
+
+        return static_cast<u8>(keycode);
+    }
+
+    if (keycode >= KEYCODE_NUMPAD_0 && keycode <= KEYCODE_NUMPAD_9) {
+        u8 value = static_cast<u8>(keycode - KEYCODE_NUMPAD_0);
+        return KEYCODE_0 + value;
+    }
+
+    return ASCII_EXTENDED_BLOCK;
+}
+
+void ps2_wait_for_output_clear();
 
 __attribute__((interrupt))
 void __irq_0x21_handler(void *arg) {
     UNUSED(arg);
+    asm("cli");
+    void set_irq_mask(u8 irq_line);
+    void clear_irq_mask(u8 irq_line);
+    set_irq_mask(1);
 
-    u8 scancode = _port_io_read_u8(PS2_DATA);
+    u8 scancode = _port_io_read_u8(PS2_DATA); _io_wait();
 
-    kprint("KEYBOARD: %c\n", scancode & 0x7F);
+    u8 action = KEY_PRESS;
+    if (scancode == 0xF0) {
+        action = KEY_RELEASE;
+        // @TODO maybe wait here?
+        scancode = _port_io_read_u8(PS2_DATA); _io_wait();
+    } else if (scancode == 0xE0) {
+        kassert(false);
+    }
 
+    u8 temp = _port_io_read_u8(0x61);
+    _port_io_write_u8(0x61, temp | 0x80); _io_wait();
+    _port_io_write_u8(0x61, temp); _io_wait();
+
+    if (scancode >= 0x84) kprint("SCANCODE: %X\n", scancode);
+    else {
+        u8 ascii = get_ascii_representable_character(scancode_set2_table[scancode], false);
+        kprint("KEYBOARD: action: %d, char: %c\n", action, ascii);
+        // if (buffer_count < 255) buffer[buffer_count++] = ascii;
+    }
+
+    clear_irq_mask(1);
     pic_set_eoi(0x21);
 }
 
