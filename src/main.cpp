@@ -591,6 +591,10 @@ void ps2_initialize() {
     clear_irq_mask(1);
 }
 
+#define PCI_MAX_BUSES  256
+#define PCI_MAX_DEVICES_PER_BUS 32
+#define PCI_MAX_FUNCTIONS_PER_DEVICE 8
+
 #define PCI_CONFIG_ADDRESS 0x0CF8
 #define PCI_CONFIG_DATA    0x0CFC
 
@@ -601,7 +605,7 @@ void ps2_initialize() {
 #define PCI_CONFIG_REGISTER_NUMBER(x) ((x) & 0xFC) // the osdev docs use a mask here, I guess what you really want is to always have a 4-byte aligned register access
 #define PCI_CONFIG_GET_ADDRESS(b, s, f, o)    (PCI_CONFIG_BUS_NUMBER(b) | PCI_CONFIG_DEVICE_NUMBER(s) | PCI_CONFIG_FUNCTION_NUMBER(f) | PCI_CONFIG_REGISTER_NUMBER(o))
 
-struct Pci_Device_Header {
+struct Pci_Device_Config {
     u16 vendor_id;
     u16 device_id;
     
@@ -617,6 +621,83 @@ struct Pci_Device_Header {
     u8 latency_timer;
     u8 header_type;
     u8 bist;
+
+    union {
+        // header_type = 0x00
+        struct {
+            u32 bar0;
+            u32 bar1;
+            u32 bar2;
+            u32 bar3;
+            u32 bar4;
+            u32 bar5;
+            u32 cardbus_cis_pointer;
+            u16 subsystem_vendor_id;
+            u16 subsystem_id;
+            u32 expansion_rom_base_addr;
+            u8 capabilities_pointer;
+            u8 pad0;
+            u16 pad1;
+            u32 pad2;
+            u8 interrupt_line;
+            u8 interrupt_pin;
+            u8 min_grant;
+            u8 max_latency;
+        } type_00;
+
+        // header_type = 0x01
+        struct {
+            u32 bar0;
+            u32 bar1;
+            u8 primary_bus_number;
+            u8 secondary_bus_number;
+            u8 subordinate_bus_number;
+            u8 secondary_latency_timer;
+            u16 memory_base;
+            u16 memory_limit;
+
+            // should this be a u64 ?
+            u32 prefetch_base_upper32;
+            u32 prefetch_base_lower32;
+
+            u16 io_base_upper16;
+            u16 io_limit_upper16;
+            u8 capabilities_pointer;
+            u32 expansion_rom_base_addr;
+            u8 interrupt_line;
+            u8 interrupt_pin;
+            u16 bridge_controller;
+        } pci_to_pci_bridge;
+
+        // header_type = 0x02
+        struct {
+            u32 exca_base_addr;
+            u8 capability_list_offset;
+            u8 pad0;
+            u16 secondary_status;
+            u8 pci_bus_number;
+            u8 cardbus_number;
+            u8 subordinate_bus_number;
+            u8 cardbus_latency_timer;
+            u32 memory_base_addr0;
+            u32 memory_limit0;
+            u32 memory_base_addr1;
+            u32 memory_limit1;
+            u32 io_base_addr0;
+            u32 io_limit0;
+            u32 io_base_addr1;
+            u32 io_limit1;
+            u8 interrupt_line;
+            u8 interrupt_pin;
+            u16 bridge_controller;
+            u16 subsystem_device_id;
+            u16 subsystem_vendor_id;
+            u32 pc_card_legacy_mode_base_addr; // @TODO osdev states this is 16 bits, but which 16 ???
+        } pci_to_cardbus_bridge;
+    };
+
+    // the configuration space is 256 bytes
+    u8 pad_to_256[256 - 0x48];
 };
 
 u16 pci_read_u16(u32 bus, u32 slot, u32 func, u32 offset) {
@@ -636,16 +717,39 @@ u16 pic_check_vendor(u8 bus, u8 slot) {
     return pci_read_u16(bus, slot, 0, 0);
 }
 
-bool pci_read_device_header(Pci_Device_Header *header, u8 bus, u8 slot) {
+bool pci_read_device_config(Pci_Device_Config *header, u32 bus, u32 slot) {
+    kassert(bus < PCI_MAX_BUSES);
+    kassert(slot < PCI_MAX_DEVICES_PER_BUS);
+
     if (pic_check_vendor(bus, slot) == 0xFFFF) return false;
     
-    kassert(sizeof(Pci_Device_Header) == 16);
+    kassert(sizeof(Pci_Device_Config) == 256);
     u32 *hdr = reinterpret_cast<u32 *>(header);
-    hdr[0] = pci_read_u32(bus, slot, 0, 0);
-    hdr[1] = pci_read_u32(bus, slot, 0, 4);
-    hdr[2] = pci_read_u32(bus, slot, 0, 8);
-    hdr[3] = pci_read_u32(bus, slot, 0, 12);
+    for (u32 i = 0; i < 256/sizeof(u32); ++i) {
+        hdr[i] = pci_read_u32(bus, slot, 0, i*sizeof(u32));
+    }
     return true;
+}
+
+Array<Pci_Device_Config> pci_devices;
+
+void print_pci_header(Pci_Device_Config *header) {
+    kprint("Vendor ID: %X\n", header->vendor_id);
+    kprint("Device ID: %X\n", header->device_id);
+    kprint("Class, subclass: %X, %X\n", header->class_code, header->subclass_code);
+    kprint("Header Type: %X\n", header->header_type);
+}
+
+void pci_enumerate_devices() {
+    for (u16 bus = 0; bus < PCI_MAX_BUSES; ++bus) {
+        for (u8 device = 0; device < PCI_MAX_DEVICES_PER_BUS; ++device) {
+            Pci_Device_Config hdr;
+            if (pci_read_device_config(&hdr, bus, device)) {
+                pci_devices.add(hdr);
+                print_pci_header(&hdr);
+            }
+        }
+    }
 }
 
 extern "C"
@@ -686,15 +790,14 @@ void kernel_main(Multiboot_Information *info) {
     // kprint("Testing interrupt...");
     // kprint("done\n");
 
-    kprint("Checking PIC 0, 0\n");
-    Pci_Device_Header header;
-    bool success = pci_read_device_header(&header, 0, 0);
+    kprint("Checking PIC 0, 0: %d\n\n", sizeof(Pci_Device_Config));
+    Pci_Device_Config header;
+    bool success = pci_read_device_config(&header, 0, 0);
     if (success) {
-        kprint("Vendor ID: %X\n", header.vendor_id);
-        kprint("Device ID: %X\n", header.device_id);
-        kprint("Class, subclass: %X, %X\n", header.class_code, header.subclass_code);
-        kprint("Header Type: %X\n", header.header_type);
+        print_pci_header(&header);
     }
+
+    pci_enumerate_devices();
 
     kerror("END!");
     for(;;) {

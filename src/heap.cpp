@@ -43,7 +43,7 @@ void *heap_map(u32 size) {
     kassert((heap_info.mappable_addr_space - heap_info.mapped_memory) >= size);
 
     u32 page_start = HEAP_VIRTUAL_BASE_ADDRESS + heap_info.mapped_memory;
-    for (u32 i = 0; i < size; i += PAGE_SIZE) {
+    for (u32 i = 0; i <= size; i += PAGE_SIZE) {
         u32 page = next_free_page();
         map_page(page, HEAP_VIRTUAL_BASE_ADDRESS + heap_info.mapped_memory, PAGE_READ_WRITE);
         heap_info.mapped_memory += PAGE_SIZE;
