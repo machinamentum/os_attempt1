@@ -591,6 +591,63 @@ void ps2_initialize() {
     clear_irq_mask(1);
 }
 
+#define PCI_CONFIG_ADDRESS 0x0CF8
+#define PCI_CONFIG_DATA    0x0CFC
+
+#define PCI_CONFIG_ENABLE_BIT     (1 << 31)
+#define PCI_CONFIG_BUS_NUMBER(x) ((x) << 16) // maybe we should mask these?
+#define PCI_CONFIG_DEVICE_NUMBER(x) ((x) << 11)
+#define PCI_CONFIG_FUNCTION_NUMBER(x) ((x) << 8)
+#define PCI_CONFIG_REGISTER_NUMBER(x) ((x) & 0xFC) // the osdev docs use a mask here, I guess what you really want is to always have a 4-byte aligned register access
+#define PCI_CONFIG_GET_ADDRESS(b, s, f, o)    (PCI_CONFIG_BUS_NUMBER(b) | PCI_CONFIG_DEVICE_NUMBER(s) | PCI_CONFIG_FUNCTION_NUMBER(f) | PCI_CONFIG_REGISTER_NUMBER(o))
+
+struct Pci_Device_Header {
+    u16 vendor_id;
+    u16 device_id;
+    
+    u16 command;
+    u16 status;
+    
+    u8 revision_id;
+    u8 prog_if;
+    u8 subclass_code;
+    u8 class_code;
+
+    u8 cache_line_size;
+    u8 latency_timer;
+    u8 header_type;
+    u8 bist;
+};
+
+u16 pci_read_u16(u32 bus, u32 slot, u32 func, u32 offset) {
+    u32 addr = PCI_CONFIG_GET_ADDRESS(bus, slot, func, offset) | PCI_CONFIG_ENABLE_BIT;
+    _port_io_write_u32(PCI_CONFIG_ADDRESS, addr);
+    u32 value = _port_io_read_u32(PCI_CONFIG_DATA) >> (((offset & 2) * 8) & 0xFFFF);
+    return static_cast<u16>(value);
+}
+
+u32 pci_read_u32(u32 bus, u32 slot, u32 func, u32 offset) {
+    u32 addr = PCI_CONFIG_GET_ADDRESS(bus, slot, func, offset) | PCI_CONFIG_ENABLE_BIT;
+    _port_io_write_u32(PCI_CONFIG_ADDRESS, addr);
+    return _port_io_read_u32(PCI_CONFIG_DATA);
+}
+
+u16 pic_check_vendor(u8 bus, u8 slot) {
+    return pci_read_u16(bus, slot, 0, 0);
+}
+
+bool pci_read_device_header(Pci_Device_Header *header, u8 bus, u8 slot) {
+    if (pic_check_vendor(bus, slot) == 0xFFFF) return false;
+    
+    kassert(sizeof(Pci_Device_Header) == 16);
+    u32 *hdr = reinterpret_cast<u32 *>(header);
+    hdr[0] = pci_read_u32(bus, slot, 0, 0);
+    hdr[1] = pci_read_u32(bus, slot, 0, 4);
+    hdr[2] = pci_read_u32(bus, slot, 0, 8);
+    hdr[3] = pci_read_u32(bus, slot, 0, 12);
+    return true;
+}
+
 extern "C"
 void kernel_main(Multiboot_Information *info) {
     asm("cli");
@@ -628,6 +685,16 @@ void kernel_main(Multiboot_Information *info) {
 
     // kprint("Testing interrupt...");
     // kprint("done\n");
+
+    kprint("Checking PIC 0, 0\n");
+    Pci_Device_Header header;
+    bool success = pci_read_device_header(&header, 0, 0);
+    if (success) {
+        kprint("Vendor ID: %X\n", header.vendor_id);
+        kprint("Device ID: %X\n", header.device_id);
+        kprint("Class, subclass: %X, %X\n", header.class_code, header.subclass_code);
+        kprint("Header Type: %X\n", header.header_type);
+    }
 
     kerror("END!");
     for(;;) {
