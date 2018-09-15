@@ -595,6 +595,8 @@ void ps2_initialize() {
 #define PCI_MAX_DEVICES_PER_BUS 32
 #define PCI_MAX_FUNCTIONS_PER_DEVICE 8
 
+#define PCI_HEADER_MULTIFUNCTION_BIT (1 << 7)
+
 #define PCI_CONFIG_ADDRESS 0x0CF8
 #define PCI_CONFIG_DATA    0x0CFC
 
@@ -713,20 +715,21 @@ u32 pci_read_u32(u32 bus, u32 slot, u32 func, u32 offset) {
     return _port_io_read_u32(PCI_CONFIG_DATA);
 }
 
-u16 pic_check_vendor(u8 bus, u8 slot) {
-    return pci_read_u16(bus, slot, 0, 0);
+u16 pic_check_vendor(u8 bus, u8 slot, u8 function) {
+    return pci_read_u16(bus, slot, function, 0);
 }
 
-bool pci_read_device_config(Pci_Device_Config *header, u32 bus, u32 slot) {
+bool pci_read_device_config(Pci_Device_Config *header, u32 bus, u32 slot, u32 function) {
     kassert(bus < PCI_MAX_BUSES);
     kassert(slot < PCI_MAX_DEVICES_PER_BUS);
+    kassert(function < PCI_MAX_FUNCTIONS_PER_DEVICE);
 
-    if (pic_check_vendor(bus, slot) == 0xFFFF) return false;
+    if (pic_check_vendor(bus, slot, function) == 0xFFFF) return false;
     
     kassert(sizeof(Pci_Device_Config) == 256);
     u32 *hdr = reinterpret_cast<u32 *>(header);
     for (u32 i = 0; i < 256/sizeof(u32); ++i) {
-        hdr[i] = pci_read_u32(bus, slot, 0, i*sizeof(u32));
+        hdr[i] = pci_read_u32(bus, slot, function, i*sizeof(u32));
     }
     return true;
 }
@@ -744,9 +747,16 @@ void pci_enumerate_devices() {
     for (u16 bus = 0; bus < PCI_MAX_BUSES; ++bus) {
         for (u8 device = 0; device < PCI_MAX_DEVICES_PER_BUS; ++device) {
             Pci_Device_Config hdr;
-            if (pci_read_device_config(&hdr, bus, device)) {
+            if (pci_read_device_config(&hdr, bus, device, 0)) {
                 pci_devices.add(hdr);
-                print_pci_header(&hdr);
+
+                if (hdr.header_type & PCI_HEADER_MULTIFUNCTION_BIT) {
+                    for (u8 func = 1; func < PCI_MAX_FUNCTIONS_PER_DEVICE; ++func) {
+                        if (pci_read_device_config(&hdr, bus, device, func)) {
+                            pci_devices.add(hdr);
+                        }
+                    }
+                }
             }
         }
     }
@@ -790,14 +800,9 @@ void kernel_main(Multiboot_Information *info) {
     // kprint("Testing interrupt...");
     // kprint("done\n");
 
-    kprint("Checking PIC 0, 0: %d\n\n", sizeof(Pci_Device_Config));
-    Pci_Device_Config header;
-    bool success = pci_read_device_config(&header, 0, 0);
-    if (success) {
-        print_pci_header(&header);
-    }
-
     pci_enumerate_devices();
+
+    For (pci_devices) print_pci_header(&it);
 
     kerror("END!");
     for(;;) {

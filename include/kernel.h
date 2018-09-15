@@ -130,6 +130,8 @@ void ps2_wait_for_input_ready();
 
 #include "heap.h"
 
+#define For(x) for (auto it : x)
+
 enum ALLOCATOR_MODE {
     FREE,
     ALLOC,
@@ -176,6 +178,16 @@ struct Array {
 
     void clear() {
     	count = 0;
+    }
+
+    T *begin() {
+        if (count) return &data[0];
+        return nullptr;
+    }
+
+    T *end() {
+        if (count) return &data[count-1];
+        return nullptr;
     }
 };
 
