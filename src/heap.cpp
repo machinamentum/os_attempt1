@@ -75,3 +75,23 @@ void *heap_alloc(u32 size) {
     kprint("heap: Allocated block at %p of size %d\n", out, allocation_size);
     return out;
 }
+
+void heap_free(void *mem) {
+    // do nothing
+}
+
+void *heap_allocator(ALLOCATOR_MODE mode, void *existing, s64 size) {
+    if (mode == ALLOCATOR_MODE_ALLOC) {
+        kassert(existing == nullptr);
+        return heap_alloc(size);
+    } else if (mode == ALLOCATOR_MODE_FREE) {
+        kassert(size == 0);
+        kassert(existing);
+
+        heap_free(existing);
+        return nullptr;
+    }
+
+    kassert(false && "mode is an invalid value");
+    return nullptr;
+}

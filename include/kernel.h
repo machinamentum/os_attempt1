@@ -128,23 +128,23 @@ void ps2_wait_for_response();
 void ps2_wait_for_output_clear();
 void ps2_wait_for_input_ready();
 
-#include "heap.h"
-
-#define For(x) for (auto it : x)
-
 enum ALLOCATOR_MODE {
-    FREE,
-    ALLOC,
+    ALLOCATOR_MODE_FREE,
+    ALLOCATOR_MODE_ALLOC,
 };
 
 typedef void *(*allocator_type)(ALLOCATOR_MODE, void *existing, s64 size);
+
+#include "heap.h"
+
+#define For(x) for (auto it : x)
 
 template <typename T>
 struct Array {
     T *data = nullptr;
     s64 count = 0;
     s64 allocated = 0;
-    allocator_type allocator = nullptr;
+    allocator_type allocator = heap_allocator;
 
     T &operator [](s64 index) {
         kassert(index >= 0 && index < count);
@@ -152,14 +152,15 @@ struct Array {
     }
 
     void reserve(s64 size) {
+        kassert(allocator);
+
         if (size > allocated) {
         	if (size < 32) size = 32;
 
             T *ndata;
-            if (allocator) ndata = reinterpret_cast<T *>(allocator(ALLOC, nullptr, size * sizeof(T)));
-            else ndata = reinterpret_cast<T *>(heap_alloc(size * sizeof(T)));
+            ndata = reinterpret_cast<T *>(allocator(ALLOCATOR_MODE_ALLOC, nullptr, size * sizeof(T)));
             memcpy(ndata, data, count * sizeof(T));
-            if (allocator) allocator(FREE, data, 0);
+            if (data) allocator(ALLOCATOR_MODE_FREE, data, 0);
             data = ndata;
             allocated = size;
         }
