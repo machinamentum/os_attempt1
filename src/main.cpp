@@ -595,6 +595,10 @@ void ps2_initialize() {
 #define PCI_MAX_DEVICES_PER_BUS 32
 #define PCI_MAX_FUNCTIONS_PER_DEVICE 8
 
+#define PCI_CLASS_MASS_STORAGE_CONTROLLER 0x01
+
+#define PCI_SUBCLASS_IDE_CONTROLLER       0x01
+
 #define PCI_HEADER_MULTIFUNCTION_BIT (1 << 7)
 
 #define PCI_CONFIG_ADDRESS 0x0CF8
@@ -762,6 +766,17 @@ void pci_enumerate_devices() {
     }
 }
 
+void create_ide_driver(Pci_Device_Config *header) {
+    kassert( (header->header_type & (~PCI_HEADER_MULTIFUNCTION_BIT)) == 0);
+
+    kprint("BAR0: %X\n", header->type_00.bar0);
+    kprint("BAR1: %X\n", header->type_00.bar1);
+    kprint("BAR2: %X\n", header->type_00.bar2);
+    kprint("BAR3: %X\n", header->type_00.bar3);
+    kprint("BAR4: %X\n", header->type_00.bar4);
+    kprint("BAR5: %X\n", header->type_00.bar5);
+}
+
 extern "C"
 void kernel_main(Multiboot_Information *info) {
     asm("cli");
@@ -803,6 +818,12 @@ void kernel_main(Multiboot_Information *info) {
     pci_enumerate_devices();
 
     For (pci_devices) print_pci_header(&it);
+
+    For (pci_devices) {
+        if (it.class_code == PCI_CLASS_MASS_STORAGE_CONTROLLER && it.subclass_code == PCI_SUBCLASS_IDE_CONTROLLER) {
+            create_ide_driver(&it);
+        }
+    }
 
     kerror("END!");
     for(;;) {
