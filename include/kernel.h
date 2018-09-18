@@ -28,9 +28,18 @@ typedef uint8_t  u8;
 typedef float float32;
 typedef double float64;
 
+struct String;
+
+String temp_string(char *c_string);
+
 struct String {
     u8 *data;
     s64 length;
+
+    String(){}
+    String(char *str) {
+        *this = temp_string(str);
+    }
 };
 
 #define PAGE_PRESENT           (1 << 0)
@@ -58,8 +67,6 @@ void memcpy(void *dst, void *src, u32 num);
 void *zero_memory(void *dst, u32 size);
 
 s64 strlen(char *c_string);
-
-String temp_string(char *c_string);
 
 void kprint(char *s, ...);
 

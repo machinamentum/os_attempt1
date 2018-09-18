@@ -16,4 +16,13 @@ void set_idt(void *idt, u16 size);
 
 void init_interrupt_descriptor_table();
 
+#define IRQ_RESULT_CONTINUE 0
+#define IRQ_RESULT_HANDLED  1
+
+typedef s32 irq_result_type;
+typedef irq_result_type (*irq_handler_type)(s32 irq, void *dev);
+
+void register_irq_handler(s32 irq, String device_name, irq_handler_type handler,  void *dev);
+void detach_irq_handler(s32 irq, void *dev);
+
 #endif // INTERRUPTS_H

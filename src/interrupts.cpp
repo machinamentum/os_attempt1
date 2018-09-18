@@ -28,6 +28,45 @@ void set_idt_entry(Idt_Descriptor *idt, u32 offset, u8 type_attr, u8 privelege) 
     idt->offset_2 = (offset >> 16) & 0xFFFF;
 }
 
+struct IRQ_Receiver {
+    void *dev;
+    irq_handler_type handler;
+};
+
+Array<IRQ_Receiver> irq_Receiver_table[0x10];
+
+void register_irq_handler(s32 irq, String device_name, irq_handler_type handler,  void *dev) {
+    kassert(irq >= 0 && irq <= 0x10);
+
+    For (irq_Receiver_table[irq]) {
+        if (it.dev == dev) return; // @TODO return an error code ?
+    }
+
+    IRQ_Receiver recv;
+    recv.handler = handler;
+    recv.dev = dev;
+
+    irq_Receiver_table[irq].add(recv);
+}
+
+void detach_irq_handler(s32 irq, void *dev) {
+
+}
+
+static void run_interrupt_handlers(s32 irq) {
+    kassert(irq >= 0 && irq <= 0x10);
+
+    Array<IRQ_Receiver> *handlers = &irq_Receiver_table[irq];
+
+    For (*handlers) {
+        irq_result_type result = it.handler(irq, it.dev);
+        if (result == IRQ_RESULT_HANDLED) return;
+        if (result == IRQ_RESULT_CONTINUE) continue;
+
+        // @TODO what should we do if the driver returns other codes?
+    }
+}
+
 __attribute__((interrupt))
 void __irq_0x00_handler(void *arg) {
     UNUSED(arg);
@@ -222,6 +261,7 @@ void __irq_0x1F_handler(void *arg) {
 __attribute__((interrupt))
 void __irq_0x20_handler(void *arg) {
     UNUSED(arg);
+    run_interrupt_handlers(0);
     pic_set_eoi(0x20);
 }
 
@@ -394,6 +434,7 @@ u8 get_ascii_representable_character(u32 keycode, bool shift_pressed) {
 __attribute__((interrupt))
 void __irq_0x21_handler(void *arg) {
     UNUSED(arg);
+    run_interrupt_handlers(1);
 
     if (_port_io_read_u8(PS2_STATUS) & PS2_STATUS_OUTPUT_BUFFER_BIT) {
         u8 scancode = _port_io_read_u8(PS2_DATA); _io_wait();
@@ -442,105 +483,105 @@ void __irq_0x21_handler(void *arg) {
 __attribute__((interrupt))
 void __irq_0x22_handler(void *arg) {
     UNUSED(arg);
-
+    run_interrupt_handlers(2);
     pic_set_eoi(0x22);
 }
 
 __attribute__((interrupt))
 void __irq_0x23_handler(void *arg) {
     UNUSED(arg);
-
+    run_interrupt_handlers(3);
     pic_set_eoi(0x23);
 }
 
 __attribute__((interrupt))
 void __irq_0x24_handler(void *arg) {
     UNUSED(arg);
-
+    run_interrupt_handlers(4);
     pic_set_eoi(0x24);
 }
 
 __attribute__((interrupt))
 void __irq_0x25_handler(void *arg) {
     UNUSED(arg);
-
+    run_interrupt_handlers(5);
     pic_set_eoi(0x25);
 }
 
 __attribute__((interrupt))
 void __irq_0x26_handler(void *arg) {
     UNUSED(arg);
-
+    run_interrupt_handlers(6);
     pic_set_eoi(0x26);
 }
 
 __attribute__((interrupt))
 void __irq_0x27_handler(void *arg) {
     UNUSED(arg);
-
+    run_interrupt_handlers(7);
     pic_set_eoi(0x27);
 }
 
 __attribute__((interrupt))
 void __irq_0x28_handler(void *arg) {
     UNUSED(arg);
-
+    run_interrupt_handlers(8);
     pic_set_eoi(0x28);
 }
 
 __attribute__((interrupt))
 void __irq_0x29_handler(void *arg) {
     UNUSED(arg);
-
+    run_interrupt_handlers(9);
     pic_set_eoi(0x29);
 }
 
 __attribute__((interrupt))
 void __irq_0x2A_handler(void *arg) {
     UNUSED(arg);
-
+    run_interrupt_handlers(10);
     pic_set_eoi(0x2A);
 }
 
 __attribute__((interrupt))
 void __irq_0x2B_handler(void *arg) {
     UNUSED(arg);
-
+    run_interrupt_handlers(11);
     pic_set_eoi(0x2B);
 }
 
 __attribute__((interrupt))
 void __irq_0x2C_handler(void *arg) {
     UNUSED(arg);
-
+    run_interrupt_handlers(12);
     pic_set_eoi(0x2C);
 }
 
 __attribute__((interrupt))
 void __irq_0x2D_handler(void *arg) {
     UNUSED(arg);
-
+    run_interrupt_handlers(13);
     pic_set_eoi(0x2D);
 }
 
 __attribute__((interrupt))
 void __irq_0x2E_handler(void *arg) {
     UNUSED(arg);
-
+    run_interrupt_handlers(14);
     pic_set_eoi(0x2E);
 }
 
 __attribute__((interrupt))
 void __irq_0x2F_handler(void *arg) {
     UNUSED(arg);
-
+    run_interrupt_handlers(15);
     pic_set_eoi(0x2F);
 }
 
 __attribute__((interrupt))
 void __irq_0x30_handler(void *arg) {
     UNUSED(arg);
-
+    run_interrupt_handlers(16);
     pic_set_eoi(0x30);
 }
 
