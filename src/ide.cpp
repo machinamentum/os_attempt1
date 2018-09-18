@@ -3,6 +3,21 @@
 #include "pci.h"
 #include "driver_interface.h"
 
+struct Spinlock {
+    s32 value = 0;
+};
+
+void spinlock_attain(Spinlock *lock) {
+    lock->value--;
+    while (lock->value != 0) asm("hlt");
+}
+
+void spinlock_release(Spinlock *lock) {
+    while (lock->value == 0) asm("hlt");
+
+    lock->value++;
+}
+
 #define PCI_IDE_COMPAT_PRIMARY_COMMAND_BLOCK_START 0x01F0
 #define PCI_IDE_COMPAT_PRIMARY_CONTROL_BLOCK_START 0x03F6
 #define PCI_IDE_COMPAT_PIMARY_IRQ 14
@@ -41,10 +56,17 @@ struct IDE_Driver {
     u16 control_block;
     u8 selected_drive = 0xFF;
     bool is_compat_mode;
+
+    Spinlock irq_wait_lock;
 } ide_primary_driver;
 
 irq_result_type ide_irq_handler(s32 irq, void *dev) {
+    IDE_Driver *ide = reinterpret_cast<IDE_Driver *>(dev);
+    spinlock_release(&ide->irq_wait_lock);
 
+    // @TODO we have to read the regular status register here in order to tell the drive we intercepted the IRQ
+    // @TODO determine that the IRQ actually came from the IDE drive
+    return IRQ_RESULT_HANDLED;
 }
 
 void ide_flush_device_cache(IDE_Driver *ide) {
@@ -104,6 +126,7 @@ void create_ide_driver(Pci_Device_Config *header) {
         ide_primary_driver.command_block = PCI_IDE_COMPAT_PRIMARY_COMMAND_BLOCK_START;
         ide_primary_driver.control_block = PCI_IDE_COMPAT_PRIMARY_CONTROL_BLOCK_START;
     }
+    ide_primary_driver.selected_drive = 0xFF;
 
     u8 status = ide_read_cmd_reg_u8(&ide_primary_driver, PCI_IDE_STATUS_READ_REGISTER);
     if (status == 0xFF){
@@ -113,14 +136,27 @@ void create_ide_driver(Pci_Device_Config *header) {
     	return;
     }
 
+    kassert(ide_primary_driver.selected_drive == 0xFF);
+
+    // install irq handler
+    register_irq_handler(14, "IDE Controller", ide_irq_handler, &ide_primary_driver);
+
     ide_write_cmd_reg_u8(&ide_primary_driver, PCI_IDE_DRIVE_HEAD_REGISTER, 0);
+    ide_write_ctrl_reg_u8(&ide_primary_driver, PCI_IDE_DEVICE_CONTROL_WRITE_REGISTER, 1 << 2);
+    ide_write_ctrl_reg_u8(&ide_primary_driver, PCI_IDE_DEVICE_CONTROL_WRITE_REGISTER, 0);
+
+    void clear_irq_mask(u8 irq_line);
+    clear_irq_mask(2);
+    clear_irq_mask(14);
 
     ide_select_drive(&ide_primary_driver, PCI_IDE_DRIVE_MASTER);
-    ide_write_cmd_reg_u8(&ide_primary_driver, PCI_IDE_SECTOR_COUNT_REGISTER, 0);
+    ide_write_cmd_reg_u8(&ide_primary_driver, PCI_IDE_SECTOR_COUNT_REGISTER, 1);
     ide_write_cmd_reg_u8(&ide_primary_driver, PCI_IDE_SECTOR_NUMBER_REGISTER, 0);
     ide_write_cmd_reg_u8(&ide_primary_driver, PCI_IDE_CYLINDER_LOW_REGISTER, 0);
     ide_write_cmd_reg_u8(&ide_primary_driver, PCI_IDE_CYLINDER_HIGH_REGISTER, 0);
     ide_write_cmd_reg_u8(&ide_primary_driver, PCI_IDE_COMMAND_WRITE_REGISTER, PCI_IDE_COMMAND_IDENTIFY);
+
+    spinlock_attain(&ide_primary_driver.irq_wait_lock);
 
     status = ide_read_cmd_reg_u8(&ide_primary_driver, PCI_IDE_STATUS_READ_REGISTER);
     if (status == 0) {
@@ -130,7 +166,4 @@ void create_ide_driver(Pci_Device_Config *header) {
     	kprint("IDE Status: %X\n", status);
     }
 
-
-    // install irq handler
-    register_irq_handler(14, "IDE Controller", ide_irq_handler, &ide_primary_driver);
 }

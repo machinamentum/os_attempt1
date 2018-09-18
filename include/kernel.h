@@ -144,7 +144,7 @@ typedef void *(*allocator_type)(ALLOCATOR_MODE, void *existing, s64 size);
 
 #include "heap.h"
 
-#define For(x) for (auto it : x)
+#define For(x) for (auto it : (x) )
 
 template <typename T>
 struct Array {
@@ -163,6 +163,8 @@ struct Array {
 
         if (size > allocated) {
         	if (size < 32) size = 32;
+
+            kassert(allocator == heap_allocator);
 
             T *ndata;
             ndata = reinterpret_cast<T *>(allocator(ALLOCATOR_MODE_ALLOC, nullptr, size * sizeof(T)));
@@ -194,7 +196,7 @@ struct Array {
     }
 
     T *end() {
-        if (count) return &data[count-1];
+        if (count) return &data[count];
         return nullptr;
     }
 };

@@ -36,7 +36,7 @@ struct IRQ_Receiver {
 Array<IRQ_Receiver> irq_Receiver_table[0x10];
 
 void register_irq_handler(s32 irq, String device_name, irq_handler_type handler,  void *dev) {
-    kassert(irq >= 0 && irq <= 0x10);
+    kassert(irq >= 0 && irq < 0x10);
 
     For (irq_Receiver_table[irq]) {
         if (it.dev == dev) return; // @TODO return an error code ?
@@ -567,6 +567,7 @@ void __irq_0x2D_handler(void *arg) {
 __attribute__((interrupt))
 void __irq_0x2E_handler(void *arg) {
     UNUSED(arg);
+    kprint("IDE IRQ 14\n");
     run_interrupt_handlers(14);
     pic_set_eoi(0x2E);
 }
@@ -581,8 +582,6 @@ void __irq_0x2F_handler(void *arg) {
 __attribute__((interrupt))
 void __irq_0x30_handler(void *arg) {
     UNUSED(arg);
-    run_interrupt_handlers(16);
-    pic_set_eoi(0x30);
 }
 
 __attribute__((interrupt))
