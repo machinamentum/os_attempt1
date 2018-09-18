@@ -766,6 +766,40 @@ void pci_enumerate_devices() {
     }
 }
 
+#define PCI_IDE_COMPAT_PRIMARY_COMMAND_BLOCK_START 0x01F0
+#define PCI_IDE_COMPAT_PRIMARY_CONTROL_BLOCK_START 0x03F6
+#define PCI_IDE_COMPAT_PIMARY_IRQ 14
+
+#define PCI_IDE_COMPAT_SECONDARY_COMMAND_BLOCK_START 0x0170
+#define PCI_IDE_COMPAT_SECONDARY_CONTROL_BLOCK_START 0x0376
+#define PCI_IDE_COMPAT_SECONDARY_IRQ 15
+
+#define PCI_IDE_PROG_IF_PRIMARY_MODE_BIT    (1 << 0)
+#define PCI_IDE_PROG_IF_PRIMARY_FIXED_BIT   (1 << 1)
+#define PCI_IDE_PROG_IF_SECONDARY_MODE_BIT  (1 << 2)
+#define PCI_IDE_PROG_IF_SECONDARY_FIXED_BIT (1 << 3)
+
+#define PCI_IDE_DATA_REGISTER           0
+#define PCI_IDE_ERROR_READ_REGISTER     1
+#define PCI_IDE_FEATURES_WRITE_REGISTER 1
+#define PCI_IDE_SECTOR_COUNT_REGISTER   2
+#define PCI_IDE_SECTOR_NUMBER_REGISTER  3
+#define PCI_IDE_CYLINDER_LOW_REGISTER   4
+#define PCI_IDE_CYLINDER_HIGH_REGISTER  5
+#define PCI_IDE_DRIVE_HEAD_REGISTER     6
+#define PCI_IDE_STATUS_READ_REGISTER    7
+#define PCI_IDE_COMMAND_WRITE_REGISTER  7
+
+#define PCI_IDE_ALT_STATUS_READ_REGISTER      0
+#define PCI_IDE_DEVICE_CONTROL_WRITE_REGISTER 0
+#define PCI_IDE_DRIVE_ADDRESS_READ_REGISTER   1
+
+struct IDE_Driver {
+    u16 command_block;
+    u16 control_block;
+    bool is_compat_mode;
+} ide_primary_driver;
+
 void create_ide_driver(Pci_Device_Config *header) {
     kassert( (header->header_type & (~PCI_HEADER_MULTIFUNCTION_BIT)) == 0);
 
@@ -775,6 +809,14 @@ void create_ide_driver(Pci_Device_Config *header) {
     kprint("BAR3: %X\n", header->type_00.bar3);
     kprint("BAR4: %X\n", header->type_00.bar4);
     kprint("BAR5: %X\n", header->type_00.bar5);
+    kprint("ProgIF: %X\n", header->type_00.prog_if);
+    u8 prog_if = header->type_00.prog_if;
+
+    ide_primary_driver.is_compat_mode = ((prog_if & PCI_IDE_PROG_IF_PRIMARY_MODE_BIT) == 0);
+    if (ide_primary_driver.is_compat_mode) {
+        ide_primary_driver.command_block = PCI_IDE_COMPAT_PRIMARY_COMMAND_BLOCK_START;
+        ide_primary_driver.control_block = PCI_IDE_COMPAT_PRIMARY_CONTROL_BLOCK_START;
+    }
 }
 
 extern "C"
