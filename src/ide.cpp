@@ -307,16 +307,17 @@ void create_ide_driver(Pci_Device_Config *header) {
     // ide_device_write_sectors_lba28(&ide_primary_driver, &buffer, 1, 0);
     // zero_memory(&buffer, sizeof(buffer));
 
-    kprint("BUF: %X\n", buffer[12]);
-    kprint("BUF: %X\n", buffer[90]);
-    kprint("BUF: %X\n", buffer[100]);
-    kprint("BUF: %X\n", buffer[200]);
+    kprint("IDE BUF[ 12]: %X\n", buffer[12]);
+    kprint("IDE BUF[ 90]: %X\n", buffer[90]);
+    kprint("IDE BUF[100]: %X\n", buffer[100]);
+    kprint("IDE BUF[200]: %X\n", buffer[200]);
 
     ide_device_read_sectors_lba28(&ide_primary_driver, &buffer, 1, 0);
 
-    kprint("BUF: %X\n", buffer[12]);
-    kprint("BUF: %X\n", buffer[90]);
-    kprint("BUF: %X\n", buffer[100]);
-    kprint("BUF: %X\n", buffer[200]);
+    kprint("Post-IDE read\n");
+    kprint("IDE BUF[ 12]: %X\n", buffer[12]);
+    kprint("IDE BUF[ 90]: %X\n", buffer[90]);
+    kprint("IDE BUF[100]: %X\n", buffer[100]);
+    kprint("IDE BUF[200]: %X\n", buffer[200]);
 
 }
