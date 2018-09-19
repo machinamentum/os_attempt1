@@ -122,12 +122,22 @@ set_idt:
 global _port_io_read_u8
 global _port_io_write_u8
 
+global _port_io_read_u16
+global _port_io_write_u16
+
+global _port_io_read_u32
 global _port_io_write_u32
 
 _port_io_write_u32:
 	mov dx, [esp+4]
 	mov eax, [esp+8]
 	out dx, eax
+	ret
+
+_port_io_write_u16:
+	mov dx, [esp+4]
+	mov ax, [esp+8]
+	out dx, ax
 	ret
 
 _port_io_write_u8:
@@ -141,7 +151,11 @@ _port_io_read_u8:
 	in al, dx
 	ret
 
-global _port_io_read_u32
+_port_io_read_u16:
+	mov dx, [esp+4]
+	in ax, dx
+	ret
+
 _port_io_read_u32:
 	mov dx, [esp+4]
 	in eax, dx

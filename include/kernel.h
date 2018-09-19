@@ -83,14 +83,20 @@ void _kassert(bool arg, char *s, char *file, u32 line);
 #define kassert(arg) _kassert((arg), #arg, __FILE__, __LINE__)
 
 extern "C"
-void _port_io_write_u32(u16 port, u32 value);
-extern "C"
 void _port_io_write_u8(u16 port, u8 value);
+extern "C"
+void _port_io_write_u16(u16 port, u16 value);
+extern "C"
+void _port_io_write_u32(u16 port, u32 value);
 
 extern "C"
 u8  _port_io_read_u8(u16 port);
 extern "C"
 u32 _port_io_read_u32(u16 port);
+extern "C"
+u16 _port_io_read_u16(u16 port);
+
+
 extern "C"
 void _io_wait();
 

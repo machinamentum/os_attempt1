@@ -7,13 +7,16 @@ struct Spinlock {
     s32 value = 0;
 };
 
-void spinlock_attain(Spinlock *lock) {
+void spinlock_wait(Spinlock *lock) {
     lock->value--;
     while (lock->value != 0) asm("hlt");
 }
 
 void spinlock_release(Spinlock *lock) {
-    while (lock->value == 0) asm("hlt");
+	// hmm... we cant acutally wait here because if
+	// we call this from an interrupt before spinlock_wait is called
+	// then we loop forever
+    // while (lock->value == 0) asm("hlt");
 
     lock->value++;
 }
@@ -35,9 +38,9 @@ void spinlock_release(Spinlock *lock) {
 #define PCI_IDE_ERROR_READ_REGISTER     1
 #define PCI_IDE_FEATURES_WRITE_REGISTER 1
 #define PCI_IDE_SECTOR_COUNT_REGISTER   2
-#define PCI_IDE_SECTOR_NUMBER_REGISTER  3
-#define PCI_IDE_CYLINDER_LOW_REGISTER   4
-#define PCI_IDE_CYLINDER_HIGH_REGISTER  5
+#define PCI_IDE_LBALO_REGISTER          3
+#define PCI_IDE_LBAMID_REGISTER         4
+#define PCI_IDE_LBAHI_REGISTER          5
 #define PCI_IDE_DRIVE_HEAD_REGISTER     6
 #define PCI_IDE_STATUS_READ_REGISTER    7
 #define PCI_IDE_COMMAND_WRITE_REGISTER  7
@@ -49,7 +52,18 @@ void spinlock_release(Spinlock *lock) {
 #define PCI_IDE_DRIVE_MASTER 0
 #define PCI_IDE_DRIVE_SLAVE  1
 
+#define PCI_IDE_STATUS_ERR_BIT  (1 << 0)
+#define PCI_IDE_STATUS_IDX_BIT  (1 << 1)
+#define PCI_IDE_STATUS_CORR_BIT (1 << 2)
+#define PCI_IDE_STATUS_DRQ_BIT  (1 << 3)
+#define PCI_IDE_STATUS_SRV_BIT  (1 << 4)
+#define PCI_IDE_STATUS_DF_BIT   (1 << 5)
+#define PCI_IDE_STATUS_RDY_BIT  (1 << 6)
+#define PCI_IDE_STATUS_BSY_BIT  (1 << 7)
+
 #define PCI_IDE_COMMAND_IDENTIFY 0xEC
+#define PCI_IDE_COMMAND_READ_SECTORS 0x20
+#define PCI_IDE_COMMAND_WRITE_SECTORS 0x30
 
 struct IDE_Driver {
     u16 command_block;
@@ -73,6 +87,10 @@ void ide_flush_device_cache(IDE_Driver *ide) {
 	_port_io_write_u8(ide->command_block + PCI_IDE_COMMAND_WRITE_REGISTER, 0xE7);
 }
 
+u16 ide_read_cmd_reg_u16(IDE_Driver *ide, s8 reg) {
+	return _port_io_read_u16(ide->command_block + reg);
+}
+
 u8 ide_read_cmd_reg_u8(IDE_Driver *ide, s8 reg) {
 	return _port_io_read_u8(ide->command_block + reg);
 }
@@ -80,6 +98,11 @@ u8 ide_read_cmd_reg_u8(IDE_Driver *ide, s8 reg) {
 void ide_write_cmd_reg_u8(IDE_Driver *ide, s8 reg, u8 value) {
 	_port_io_write_u8(ide->command_block + reg, value);
 }
+
+void ide_write_cmd_reg_u16(IDE_Driver *ide, s8 reg, u16 value) {
+	_port_io_write_u16(ide->command_block + reg, value);
+}
+
 
 u8 ide_read_ctrl_reg_u8(IDE_Driver *ide, s8 reg) {
 	return _port_io_read_u8(ide->control_block + reg);
@@ -107,6 +130,97 @@ u8 ide_select_drive(IDE_Driver *ide, u8 drive) {
 	} else {
 		return ide_read_ctrl_reg_u8(ide, PCI_IDE_ALT_STATUS_READ_REGISTER);
 	}
+}
+
+u8 ide_wait_for_busy_clear(IDE_Driver *ide) {
+	u8 status = ide_read_cmd_reg_u8(ide, PCI_IDE_STATUS_READ_REGISTER);
+	while (status & PCI_IDE_STATUS_BSY_BIT) status = ide_read_cmd_reg_u8(ide, PCI_IDE_STATUS_READ_REGISTER);
+	return status;
+}
+
+u8 ide_wait_for_drq_or_err_set(IDE_Driver *ide) {
+	u8 status = ide_read_cmd_reg_u8(ide, PCI_IDE_STATUS_READ_REGISTER);
+	while ( !(status & (PCI_IDE_STATUS_DRQ_BIT | PCI_IDE_STATUS_ERR_BIT)) ) status = ide_read_cmd_reg_u8(ide, PCI_IDE_STATUS_READ_REGISTER);
+	return status;
+}
+
+s64 ide_device_read(IDE_Driver *ide, void *data, u64 count, u64 *bytes_read) {
+	kassert( (count & 1) == 0);
+	u16 *data16 = reinterpret_cast<u16 *>(data);
+
+	for (u64 i = 0; i < count; i += 2) {
+		u16 val = ide_read_cmd_reg_u16(ide, PCI_IDE_DATA_REGISTER);
+		*data16 = val;
+		data16++;
+	}
+
+	if (bytes_read) *bytes_read = count;
+
+	// @TODO errors
+	return 0;
+}
+
+s64 ide_device_write(IDE_Driver *ide, void *data, u64 count, u64 *bytes_written) {
+	kassert( (count & 1) == 0);
+	u16 *data16 = reinterpret_cast<u16 *>(data);
+
+	for (u64 i = 0; i < count; i += 2) {
+		ide_write_cmd_reg_u16(ide, PCI_IDE_DATA_REGISTER, *data16);
+		data16++;
+	}
+
+	ide_flush_device_cache(ide);
+
+	if (bytes_written) *bytes_written = count;
+
+	// @TODO errors
+	return 0;
+}
+
+s64 ide_device_read_sectors_lba28(IDE_Driver *ide, void *data, u8 sector_count, u32 lba) {
+	u8 high4 = (lba >> 24) & 0xF;
+	if (ide->selected_drive == PCI_IDE_DRIVE_MASTER)     ide_write_cmd_reg_u8(ide, PCI_IDE_DRIVE_HEAD_REGISTER, 0xE0 | high4);
+	else if (ide->selected_drive == PCI_IDE_DRIVE_SLAVE) ide_write_cmd_reg_u8(ide, PCI_IDE_DRIVE_HEAD_REGISTER, 0xF0 | high4);
+
+	u8 hi = (lba >> 16) & 0xFF;
+	u8 mid = (lba >> 8) & 0xFF;
+	u8 lo = (lba >> 0) & 0xFF;
+
+	ide_write_cmd_reg_u8(ide, PCI_IDE_SECTOR_COUNT_REGISTER, sector_count);
+	ide_write_cmd_reg_u8(ide, PCI_IDE_LBALO_REGISTER, lo);
+	ide_write_cmd_reg_u8(ide, PCI_IDE_LBAMID_REGISTER, mid);
+	ide_write_cmd_reg_u8(ide, PCI_IDE_LBAHI_REGISTER, hi);
+
+	ide_write_cmd_reg_u8(ide, PCI_IDE_COMMAND_WRITE_REGISTER, PCI_IDE_COMMAND_READ_SECTORS);
+
+	ide_wait_for_busy_clear(ide);
+	u8 status = ide_wait_for_drq_or_err_set(ide);
+	if (status & PCI_IDE_STATUS_ERR_BIT) return -1;
+
+	return ide_device_read(ide, data, sector_count * 256 * sizeof(u16), nullptr);
+}
+
+s64 ide_device_write_sectors_lba28(IDE_Driver *ide, void *data, u8 sector_count, u32 lba) {
+	u8 high4 = (lba >> 24) & 0xF;
+	if (ide->selected_drive == PCI_IDE_DRIVE_MASTER)     ide_write_cmd_reg_u8(ide, PCI_IDE_DRIVE_HEAD_REGISTER, 0xE0 | high4);
+	else if (ide->selected_drive == PCI_IDE_DRIVE_SLAVE) ide_write_cmd_reg_u8(ide, PCI_IDE_DRIVE_HEAD_REGISTER, 0xF0 | high4);
+
+	u8 hi = (lba >> 16) & 0xFF;
+	u8 mid = (lba >> 8) & 0xFF;
+	u8 lo = (lba >> 0) & 0xFF;
+
+	ide_write_cmd_reg_u8(ide, PCI_IDE_SECTOR_COUNT_REGISTER, sector_count);
+	ide_write_cmd_reg_u8(ide, PCI_IDE_LBALO_REGISTER, lo);
+	ide_write_cmd_reg_u8(ide, PCI_IDE_LBAMID_REGISTER, mid);
+	ide_write_cmd_reg_u8(ide, PCI_IDE_LBAHI_REGISTER, hi);
+
+	ide_write_cmd_reg_u8(ide, PCI_IDE_COMMAND_WRITE_REGISTER, PCI_IDE_COMMAND_WRITE_SECTORS);
+
+	ide_wait_for_busy_clear(ide);
+	u8 status = ide_wait_for_drq_or_err_set(ide);
+	if (status & PCI_IDE_STATUS_ERR_BIT) return -1;
+
+	return ide_device_write(ide, data, sector_count * 256 * sizeof(u16), nullptr);
 }
 
 void create_ide_driver(Pci_Device_Config *header) {
@@ -139,31 +253,70 @@ void create_ide_driver(Pci_Device_Config *header) {
     kassert(ide_primary_driver.selected_drive == 0xFF);
 
     // install irq handler
-    register_irq_handler(14, "IDE Controller", ide_irq_handler, &ide_primary_driver);
+    // register_irq_handler(14, "IDE Controller", ide_irq_handler, &ide_primary_driver);
 
     ide_write_cmd_reg_u8(&ide_primary_driver, PCI_IDE_DRIVE_HEAD_REGISTER, 0);
     ide_write_ctrl_reg_u8(&ide_primary_driver, PCI_IDE_DEVICE_CONTROL_WRITE_REGISTER, 1 << 2);
     ide_write_ctrl_reg_u8(&ide_primary_driver, PCI_IDE_DEVICE_CONTROL_WRITE_REGISTER, 0);
 
-    void clear_irq_mask(u8 irq_line);
-    clear_irq_mask(2);
-    clear_irq_mask(14);
+    // void clear_irq_mask(u8 irq_line);
+    // clear_irq_mask(2);
+    // clear_irq_mask(14);
 
     ide_select_drive(&ide_primary_driver, PCI_IDE_DRIVE_MASTER);
     ide_write_cmd_reg_u8(&ide_primary_driver, PCI_IDE_SECTOR_COUNT_REGISTER, 1);
-    ide_write_cmd_reg_u8(&ide_primary_driver, PCI_IDE_SECTOR_NUMBER_REGISTER, 0);
-    ide_write_cmd_reg_u8(&ide_primary_driver, PCI_IDE_CYLINDER_LOW_REGISTER, 0);
-    ide_write_cmd_reg_u8(&ide_primary_driver, PCI_IDE_CYLINDER_HIGH_REGISTER, 0);
+    ide_write_cmd_reg_u8(&ide_primary_driver, PCI_IDE_LBALO_REGISTER, 0);
+    ide_write_cmd_reg_u8(&ide_primary_driver, PCI_IDE_LBAMID_REGISTER, 0);
+    ide_write_cmd_reg_u8(&ide_primary_driver, PCI_IDE_LBAHI_REGISTER, 0);
     ide_write_cmd_reg_u8(&ide_primary_driver, PCI_IDE_COMMAND_WRITE_REGISTER, PCI_IDE_COMMAND_IDENTIFY);
 
-    spinlock_attain(&ide_primary_driver.irq_wait_lock);
+    // spinlock_wait(&ide_primary_driver.irq_wait_lock);
 
     status = ide_read_cmd_reg_u8(&ide_primary_driver, PCI_IDE_STATUS_READ_REGISTER);
     if (status == 0) {
     	kprint("IDE Master Drive isnt attached.\n");
     	return;
-    } else {
-    	kprint("IDE Status: %X\n", status);
     }
+
+    status = ide_wait_for_busy_clear(&ide_primary_driver);
+
+    u8 lbamid = ide_read_cmd_reg_u8(&ide_primary_driver, PCI_IDE_LBAMID_REGISTER);
+    u8 lbahi = ide_read_cmd_reg_u8(&ide_primary_driver, PCI_IDE_LBAHI_REGISTER);
+
+    if ( (lbamid != 0) || (lbahi != 0) ) {
+    	kprint("Drive is not ATA\n");
+    	return;
+    }
+
+    status = ide_wait_for_drq_or_err_set(&ide_primary_driver);
+
+    if (status & PCI_IDE_STATUS_ERR_BIT) {
+    	// @TODO error handle, note that SATA and ATAPI drives always set the error bit but send their PIO data anyways
+    	kprint("Drive returned error\n");
+    	return;
+    }
+
+    u16 buffer[256];
+    ide_device_read(&ide_primary_driver, &buffer, 256 * sizeof(u16), nullptr);
+
+    // buffer[12] = 0xBEEF;
+    // buffer[90] = 0xCAFE;
+    // buffer[100] = 0xBEEF;
+    // buffer[200] = 0xCAFE;
+
+    // ide_device_write_sectors_lba28(&ide_primary_driver, &buffer, 1, 0);
+    // zero_memory(&buffer, sizeof(buffer));
+
+    kprint("BUF: %X\n", buffer[12]);
+    kprint("BUF: %X\n", buffer[90]);
+    kprint("BUF: %X\n", buffer[100]);
+    kprint("BUF: %X\n", buffer[200]);
+
+    ide_device_read_sectors_lba28(&ide_primary_driver, &buffer, 1, 0);
+
+    kprint("BUF: %X\n", buffer[12]);
+    kprint("BUF: %X\n", buffer[90]);
+    kprint("BUF: %X\n", buffer[100]);
+    kprint("BUF: %X\n", buffer[200]);
 
 }
