@@ -2,6 +2,10 @@
 #ifndef PCI_H
 #define PCI_H
 
+#define PCI_VENDOR_ID_VMWARE 0x15AD
+
+#define PCI_DEVICE_ID_VMWARE_SVGA2 0x0405
+
 #define PCI_MAX_BUSES  256
 #define PCI_MAX_DEVICES_PER_BUS 32
 #define PCI_MAX_FUNCTIONS_PER_DEVICE 8
@@ -115,7 +119,13 @@ struct Pci_Device_Config {
 
     // the configuration space is 256 bytes
     u8 pad_to_256[256 - 0x48];
+
+    u8 bus;
+    u8 slot;
+    u8 function;
 };
+
+void pci_enable_memory(Pci_Device_Config *config);
 
 
 #endif

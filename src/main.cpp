@@ -252,7 +252,8 @@ void map_page(u32 physical, u32 virtual_addr, u32 flags) {
     u32 *pt = ((u32 *) 0xFFC00000) + (0x400 * dir_index);
     
     if (!(pd[dir_index] & PAGE_PRESENT)) {
-        u32 *table = nullptr;
+        u32 *table = nullptr; // @Incomplete we crash if hit here
+        kassert(table);
         for (int i = 0; i < 1024; ++i) {
             table[i] = PAGE_READ_WRITE;
         }
@@ -599,6 +600,12 @@ u16 pci_read_u16(u32 bus, u32 slot, u32 func, u32 offset) {
     return static_cast<u16>(value);
 }
 
+void pci_write_u32(u32 bus, u32 slot, u32 func, u32 offset, u32 value) {
+    u32 addr = PCI_CONFIG_GET_ADDRESS(bus, slot, func, offset) | PCI_CONFIG_ENABLE_BIT;
+    _port_io_write_u32(PCI_CONFIG_ADDRESS, addr);
+    _port_io_write_u32(PCI_CONFIG_DATA, value);
+}
+
 u32 pci_read_u32(u32 bus, u32 slot, u32 func, u32 offset) {
     u32 addr = PCI_CONFIG_GET_ADDRESS(bus, slot, func, offset) | PCI_CONFIG_ENABLE_BIT;
     _port_io_write_u32(PCI_CONFIG_ADDRESS, addr);
@@ -609,6 +616,16 @@ u16 pic_check_vendor(u8 bus, u8 slot, u8 function) {
     return pci_read_u16(bus, slot, function, 0);
 }
 
+void pci_enable_memory(Pci_Device_Config *config) {
+    u32 command = config->command | 0x0007;
+    u32 packet = command;
+
+    u8 bus = config->bus;
+    u8 slot = config->slot;
+    u8 func = config->function;
+    pci_write_u32(bus, slot, func, 0x4, packet);
+}
+
 bool pci_read_device_config(Pci_Device_Config *header, u32 bus, u32 slot, u32 function) {
     kassert(bus < PCI_MAX_BUSES);
     kassert(slot < PCI_MAX_DEVICES_PER_BUS);
@@ -616,11 +633,12 @@ bool pci_read_device_config(Pci_Device_Config *header, u32 bus, u32 slot, u32 fu
 
     if (pic_check_vendor(bus, slot, function) == 0xFFFF) return false;
     
-    kassert(sizeof(Pci_Device_Config) == 256);
+    // kassert(sizeof(Pci_Device_Config) == 256);
     u32 *hdr = reinterpret_cast<u32 *>(header);
     for (u32 i = 0; i < 256/sizeof(u32); ++i) {
         hdr[i] = pci_read_u32(bus, slot, function, i*sizeof(u32));
     }
+
     return true;
 }
 
@@ -629,19 +647,24 @@ Array<Pci_Device_Config> pci_devices;
 void print_pci_header(Pci_Device_Config *header) {
     kprint("Vendor ID: %X\n", header->vendor_id);
     kprint("Device ID: %X\n", header->device_id);
-    kprint("Class, subclass: %X, %X\n", header->class_code, header->subclass_code);
-    kprint("Header Type: %X\n", header->header_type);
+    // kprint("Class, subclass: %X, %X\n", header->class_code, header->subclass_code);
+    // kprint("Header Type: %X\n", header->header_type);
 }
 
 void pci_enumerate_devices() {
     for (u16 bus = 0; bus < PCI_MAX_BUSES; ++bus) {
         for (u8 device = 0; device < PCI_MAX_DEVICES_PER_BUS; ++device) {
             Pci_Device_Config hdr;
+
+            hdr.bus = bus;
+            hdr.slot = device;
+            hdr.function = 0;
             if (pci_read_device_config(&hdr, bus, device, 0)) {
                 pci_devices.add(hdr);
 
                 if (hdr.header_type & PCI_HEADER_MULTIFUNCTION_BIT) {
                     for (u8 func = 1; func < PCI_MAX_FUNCTIONS_PER_DEVICE; ++func) {
+                        hdr.function = func;
                         if (pci_read_device_config(&hdr, bus, device, func)) {
                             pci_devices.add(hdr);
                         }
@@ -653,6 +676,7 @@ void pci_enumerate_devices() {
 }
 
 void create_ide_driver(Pci_Device_Config *header);
+void create_svga_driver(Pci_Device_Config *header);
 
 extern "C"
 void kernel_main(Multiboot_Information *info) {
@@ -698,7 +722,11 @@ void kernel_main(Multiboot_Information *info) {
 
     For (pci_devices) {
         if (it.class_code == PCI_CLASS_MASS_STORAGE_CONTROLLER && it.subclass_code == PCI_SUBCLASS_IDE_CONTROLLER) {
-            create_ide_driver(&it);
+            // create_ide_driver(&it);
+        }
+
+        if (it.vendor_id == PCI_VENDOR_ID_VMWARE && it.device_id == PCI_DEVICE_ID_VMWARE_SVGA2) {
+            create_svga_driver(&it);
         }
     }
 

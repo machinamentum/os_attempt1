@@ -4,4 +4,6 @@
 #include "kernel.h"
 #include "interrupts.h"
 
+#define DRIVER_SAFE_USERLAND_VIRTUAL_ADDRESS 0xC1000000
+
 #endif
