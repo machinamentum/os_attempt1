@@ -20,8 +20,8 @@ typedef uint32_t u32;
 typedef uint16_t u16;
 typedef uint8_t  u8;
 
-typedef uint8_t strA;
-typedef uint8_t strD;
+typedef char strA;
+typedef char strD;
 
 #define HSF_PATH_SEPARATOR '/'
 
@@ -228,6 +228,15 @@ __HsfGetSector(hsf *HSF, u32 Sector, void *Buffer)
     fread(Buffer, HSF_SECTOR_SIZE, 1, HSF->FileStream);
 }
 
+void
+HsfFileRead(void *Buffer, size_t Size, size_t Count, hsf_file *File)
+{
+    size_t FinalOffset = File->SeekPosition + File->DirectoryEntry->DataLocationLE * HSF_SECTOR_SIZE;
+    fseek(File->HSF->FileStream, FinalOffset, SEEK_SET);
+    fread(Buffer, Size, Count, File->HSF->FileStream);
+    File->SeekPosition += Size * Count;
+}
+
 void *
 HsfGetSector(hsf *HSF, u32 Sector)
 {
@@ -269,12 +278,54 @@ __HsfIsInACharSet(char C) {
 }
 
 int
+__HsfStrNCmp(const char *str0, const char *str1, u32 Length) {
+    if (!str0 && str1) return -1;
+    if (str0 && !str1) return 1;
+    if (!str0 && !str1) return 0;
+
+    for (u32 i = 0; i < Length; ++i) {
+        int c0 = str0[i];
+        int c1 = str1[i];
+
+        int result = c0-c1;
+        if (c0 == 0 && c1) return result;
+        if (c1 == 0 && c0) return result;        
+        if (c0 == 0 && c1 == 0) break;
+
+        if (result == 0) continue;
+        return result;
+    }
+
+    return 0;
+}
+
+u32
+__HsfStrLen(const char *Path) {
+    const char *End = Path;
+    while (*End) End++;
+    return (u32)(End-Path);
+}
+
+void
+__HsfMemCpy(void *_dst, void *_src, u32 size) {
+    u8 *dst = (u8 *)_dst;
+    u8 *src = (u8 *)_src;
+
+    while (size) {
+        *dst = *src;
+        dst++;
+        src++;
+        size--;
+    }
+}
+
+int
 __HsfParseNextPathIdentifier(const char *Path, int StartOffset) {
-    u32 PathLength = strlen(Path);
+    u32 PathLength = __HsfStrLen(Path);
     if (StartOffset >= PathLength) return PathLength;
 
     const char *Start = Path + StartOffset;
-    u32 Length = strlen(Start);
+    u32 Length = __HsfStrLen(Start);
 
     for (u32 i = 0; i < Length; ++i) {
         char C = Start[i];
@@ -351,7 +402,7 @@ HsfGetDirectoryEntry(hsf *HSF, const char *FileName)
 
         // @FixMe this doesnt work for files because for some stupid reason file names end with ;<number>
         if (Length == FileNameLength) {
-            if (strncmp(RE->FileName, FileName+Offset, Length) == 0)
+            if (__HsfStrNCmp(&RE->FileName[0], FileName+Offset, Length) == 0)
             {
                 if (RE->FileFlags & HSF_FILE_FLAG_IS_DIR) {
                     Offset = NameEnd+1;
@@ -374,8 +425,10 @@ HsfGetDirectoryEntry(hsf *HSF, const char *FileName)
                     NameEnd = __HsfParseNextPathIdentifier(FileName, Offset);
 
                     if (NameEnd <= Offset) {
-                        memmove(Buffer, RE, RE->Length);
-                        return (hsf_directory_entry *)Buffer;
+                        hsf_directory_entry *Out = (hsf_directory_entry *)HSF_ALLOC(RE->Length);
+                        __HsfMemCpy(Out, RE, RE->Length);
+                        HSF_FREE(Buffer);
+                        return (hsf_directory_entry *)Out;
                     } else {
                         break; // there's more in the path so the path may be invalid after this point
                     }
@@ -437,15 +490,6 @@ u32
 HsfFileTell(hsf_file *File)
 {
     return File->SeekPosition;
-}
-
-void
-HsfFileRead(void *Buffer, size_t Size, size_t Count, hsf_file *File)
-{
-    size_t FinalOffset = File->SeekPosition + File->DirectoryEntry->DataLocationLE * HSF_SECTOR_SIZE;
-    fseek(File->HSF->FileStream, FinalOffset, SEEK_SET);
-    fread(Buffer, Size, Count, File->HSF->FileStream);
-    File->SeekPosition += Size * Count;
 }
 
 void HsfVisitDirectory(hsf *HSF, const char *DirPath, hsf_visitor_callback VisitorCallback, void *UserPayload) {

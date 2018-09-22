@@ -1,16 +1,18 @@
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #define HSF_IMPLEMENTATION
 #define HSF_ALLOC malloc
 #define HSF_FREE  free
 #include "../include/iso9660.h"
 
+#include <string.h>
+
 char *concatenate(const char *str0, const char *str1) {
 	u32 l0 = strlen(str0);
 	u32 l1 = strlen(str1);
 
-	char *out = malloc(l0+l1+1);
+	char *out = (char *)malloc(l0+l1+1);
 	memcpy(out, str0, l0);
 	memcpy(out+l0, str1, l1);
 	out[l0+l1] = 0;
@@ -23,8 +25,8 @@ void visitor_callback(hsf *HSF, const char *DirName, hsf_directory_entry *entry,
 	if (entry->FileName[0] == 0) return; // "."
 	if (entry->FileName[0] == '\1') return; // ".."
 
-	if (strcmp(DirName, "/ISOLINUX") && entry->FileFlags & HSF_FILE_FLAG_IS_DIR) {
-		char *FileName = malloc(entry->FileNameLength+1);
+	if (entry->FileFlags & HSF_FILE_FLAG_IS_DIR) {
+		char *FileName = (char *)malloc(entry->FileNameLength+1);
 		memcpy(FileName, &entry->FileName[0], entry->FileNameLength);
 		FileName[entry->FileNameLength] = 0;
 		char *Dir = concatenate(DirName, FileName);
@@ -61,7 +63,7 @@ int main(int argc, char **argv) {
 		u32 length = HsfFileTell(File);
 		HsfFileSeek(File, 0, HSF_SEEK_SET);
 
-		char *buffer = malloc(length+1);
+		char *buffer = (char *)malloc(length+1);
 
 		HsfFileRead(buffer, 1, length, File);
 		buffer[length] = 0;
