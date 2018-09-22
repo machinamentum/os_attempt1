@@ -647,7 +647,7 @@ Array<Pci_Device_Config> pci_devices;
 void print_pci_header(Pci_Device_Config *header) {
     kprint("Vendor ID: %X\n", header->vendor_id);
     kprint("Device ID: %X\n", header->device_id);
-    // kprint("Class, subclass: %X, %X\n", header->class_code, header->subclass_code);
+    kprint("Class, subclass: %X, %X\n", header->class_code, header->subclass_code);
     // kprint("Header Type: %X\n", header->header_type);
 }
 
@@ -720,13 +720,18 @@ void kernel_main(Multiboot_Information *info) {
 
     For (pci_devices) print_pci_header(&it);
 
+
+    // @TODO we need to create a streamlined way to managed drivers that are built into the kernel's binary and driver's that are loaded
+    // from the file system. Maybe. Perhaps the inital drivers are in the kernel and then proper drivers are loaded at runtime and they
+    // fully replace the kernel drivers. This causes some dead code in the kernel, but such code will be in small amounts since we only
+    // need minimal driver support to access the file system.
     For (pci_devices) {
         if (it.class_code == PCI_CLASS_MASS_STORAGE_CONTROLLER && it.subclass_code == PCI_SUBCLASS_IDE_CONTROLLER) {
-            // create_ide_driver(&it);
+            create_ide_driver(&it);
         }
 
         if (it.vendor_id == PCI_VENDOR_ID_VMWARE && it.device_id == PCI_DEVICE_ID_VMWARE_SVGA2) {
-            create_svga_driver(&it);
+            // create_svga_driver(&it);
         }
     }
 
