@@ -22,10 +22,12 @@
 #define SVGA_REG_GREEN_MASK  10
 #define SVGA_REG_BLUE_MASK   11
 #define SVGA_REG_BYTES_PER_LINE 12
-#define SVGA_REG_FB_OFFSET   13
-#define SVGA_REG_VRAM_SIZE   14
-#define SVGA_REG_FB_SIZE     15
+#define SVGA_REG_FB_START    13
+#define SVGA_REG_FB_OFFSET   14
+#define SVGA_REG_VRAM_SIZE   15
+#define SVGA_REG_FB_SIZE     16
 
+#define SVGA_REG_MEM_SIZE    19
 #define SVGA_REG_CONFIG_DONE 20
 
 
@@ -108,19 +110,33 @@ void create_svga_driver(Pci_Device_Config *header) {
 	u32 fb_size = svga_read_reg(svga, SVGA_REG_FB_SIZE);
 	u32 fb_start = header->type_00.bar1 & (~0xf);
 
-	// u32 mem_size = svga_read_reg(svga, svga_REG_MEM);
-	// u32 mem_start = header->type_00.bar2 & (~0x3);
+	u32 mem_size = svga_read_reg(svga, SVGA_REG_MEM_SIZE);
+	u32 mem_start = header->type_00.bar2 & (~0x3);
+
+	kprint("FB START: %X\n", fb_start);
+	kprint("FB SIZE : %X\n", fb_size);
+
+	kprint("MEM START: %X\n", mem_start);
+	kprint("MEM SIZE : %u\n", mem_size);
 
 	u32 *table = reinterpret_cast<u32 *>(heap_alloc(PAGE_SIZE));
     for (int i = 0; i < 1024; ++i) {
         table[i] = PAGE_READ_WRITE;
     }
 
-    map_page_table(table, DRIVER_SAFE_USERLAND_VIRTUAL_ADDRESS);
+    u32 *table2 = reinterpret_cast<u32 *>(heap_alloc(PAGE_SIZE));
+    for (int i = 0; i < 1024; ++i) {
+        table2[i] = PAGE_READ_WRITE;
+    }
 
-    for (u32 phys = fb_start; phys < fb_size; phys += PAGE_SIZE) {
-		map_page(phys, DRIVER_SAFE_USERLAND_VIRTUAL_ADDRESS, PAGE_PRESENT | PAGE_READ_WRITE | PAGE_DO_NOT_CACHE);
+    map_page_table(table, DRIVER_SAFE_USERLAND_VIRTUAL_ADDRESS);
+    // map_page_table(table2, DRIVER_SAFE_USERLAND_VIRTUAL_ADDRESS + 0x400000);
+
+    for (u32 phys = 0; phys < fb_size / 4; phys += PAGE_SIZE) {
+		map_page(phys + fb_start, DRIVER_SAFE_USERLAND_VIRTUAL_ADDRESS + phys, PAGE_PRESENT | PAGE_READ_WRITE | PAGE_DO_NOT_CACHE);
 	}
+
+	// for (u32 phys, mem_start, phys < mem_size)
 
 	u32 max_width = svga_read_reg(svga, SVGA_REG_MAX_WIDTH);
 	u32 max_height = svga_read_reg(svga, SVGA_REG_MAX_HEIGHT);
@@ -144,11 +160,13 @@ void create_svga_driver(Pci_Device_Config *header) {
 
 	u32 offset = svga_read_reg(svga, SVGA_REG_FB_OFFSET);
 
-	u32 *fb = reinterpret_cast<u32 *>(DRIVER_SAFE_USERLAND_VIRTUAL_ADDRESS + offset);
-	for (u32 i = offset; i < fb_size; i += 4) {
-		fb[i] = 0xFFFFFFFF;
-	}
+	kprint("Offset: %X\n", offset);
 
+	u32 *vram = reinterpret_cast<u32 *>(DRIVER_SAFE_USERLAND_VIRTUAL_ADDRESS);
+	for (u32 i = offset; i < fb_size / 4; i += 4) {
+		vram[i/4] = 0xFFFFFFFF;
+	}
+	
 	for (;;) asm("hlt");
 
 }
