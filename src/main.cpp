@@ -760,6 +760,7 @@ extern struct VMW_SVGA_Driver {
 void svga_draw_rect(VMW_SVGA_Driver *svga, s32 x, s32 y, s32 width, s32 height, u32 color);
 void svga_clear_screen(VMW_SVGA_Driver *svga, u32 color);
 void svga_draw_rect_outline(VMW_SVGA_Driver *svga, s32 x, s32 y, s32 width, s32 height, u32 color);
+void svga_update_screen(VMW_SVGA_Driver *svga);
 
 struct nk_context ctx;
 
@@ -859,10 +860,11 @@ void kernel_shell() {
 
                     break;
                 case NK_COMMAND_CIRCLE_FILLED:
-                    // circ := cast(*nk_command_circle_filled) it;
+                    nk_command_circle_filled *circ = (nk_command_circle_filled *) it;
+                    u32 c = nk_color_u32(circ->color);
                     // assert(circ.w == circ.h);
-                    // c := nk_color_cf(circ.color);
                     // draw_circle(<<renderer, cast(float) circ.x, cast(float) circ.y, cast(float) circ.w / 2, make_Color(c));
+                    svga_draw_cirle(&svga_driver, circ->x, circ->y, circ->w / 2, c);
 
                     break;
                 case NK_COMMAND_LINE:
@@ -895,6 +897,6 @@ void kernel_shell() {
             }
         }
 
-        asm("hlt");
+        svga_update_screen(&svga_driver);
     }
 }

@@ -29,14 +29,45 @@
 
 #define SVGA_REG_MEM_SIZE    19
 #define SVGA_REG_CONFIG_DONE 20
+#define SVGA_REG_SYNC        21
+#define SVGA_REG_BUSY        22
 
+#define SVGA_CMD_UPDATE    1
+
+#define SVGA_FIFO_MIN      0
+#define SVGA_FIFO_MAX      1
+#define SVGA_FIFO_NEXT_CMD 2
+#define SVGA_FIFO_STOP     3
 
 struct VMW_SVGA_Driver {
 	u16 index_port;
 	u16 value_port;
 	u16 bios_port;
 	u16 irqstatus_port;
+
+	u32 bounce_buffer_count;
+	u32 bounce_buffer_allocated;
+	u32 *bounce_buffer;
 } svga_driver;
+
+struct SVGA_Cmd_Update {
+	u32 x;
+	u32 y;
+	u32 width;
+	u32 height;
+};
+
+void svga_add_cmd(VMW_SVGA_Driver *svga, u32 type, u32 *data, u32 data_size) {
+	if (svga->bounce_buffer_count + (data_size / sizeof(u32)) + 1 < svga->bounce_buffer_allocated) {
+		svga->bounce_buffer[svga->bounce_buffer_count++] = type;
+
+		for (u32 i = 0; i < data_size / sizeof(u32); ++i) {
+			svga->bounce_buffer[svga->bounce_buffer_count++] = data[i];
+		}
+	}
+}
+
+#define ADD_CMD(svga, cmd_type, cmd_struct) svga_add_cmd(svga, cmd_type, (u32 *)&cmd_struct, sizeof(cmd_struct))
 
 u32 svga_read_reg(VMW_SVGA_Driver *svga, u32 reg) {
 	_port_io_write_u32(svga->index_port, reg);
@@ -50,10 +81,51 @@ void svga_write_reg(VMW_SVGA_Driver *svga, u32 reg, u32 value) {
 
 void svga_set_enable(VMW_SVGA_Driver *svga, u32 val) {
 	svga_write_reg(svga, SVGA_REG_ENABLE, val);
-	if (val) svga_write_reg(svga, SVGA_REG_CONFIG_DONE, 1);
+	svga_write_reg(svga, SVGA_REG_CONFIG_DONE, val);
 
 	u32 en = svga_read_reg(svga, SVGA_REG_ENABLE);
 	kprint("EN: %u\n", en);
+}
+
+void svga_fifo_full(VMW_SVGA_Driver *svga) {
+	svga_write_reg(svga, SVGA_REG_SYNC, 1);
+	svga_read_reg(svga, SVGA_REG_BUSY);
+}
+
+void svga_commit_all(VMW_SVGA_Driver *svga) {
+	svga_fifo_full(svga);
+
+	u32 *fifo = reinterpret_cast<u32 *>(DRIVER_SAFE_USERLAND_VIRTUAL_ADDRESS + 0x400000);
+
+	u32 max = fifo[SVGA_FIFO_MAX];
+	u32 min = fifo[SVGA_FIFO_MIN];
+
+	u32 next_cmd = fifo[SVGA_FIFO_NEXT_CMD];
+
+	u32 *buffer = svga->bounce_buffer;
+	u32 word32 = svga->bounce_buffer_count;
+
+	while (word32 > 0) {
+		fifo[next_cmd / sizeof(u32)] = *buffer;
+		buffer++;
+		next_cmd += sizeof(u32);
+		if (next_cmd == max) next_cmd = min;
+
+		fifo[SVGA_FIFO_NEXT_CMD] = next_cmd;
+		word32 -= 1;
+	}
+
+	svga->bounce_buffer_count = 0;
+}
+
+void svga_cmd_update_rect(VMW_SVGA_Driver *svga, u32 x, u32 y, u32 width, u32 height) {
+	SVGA_Cmd_Update up;
+	up.x = x;
+	up.y = y;
+	up.width = width;
+	up.height = height;
+	ADD_CMD(svga, SVGA_CMD_UPDATE, up);
+	svga_commit_all(svga);
 }
 
 void svga_set_mode(VMW_SVGA_Driver *svga, u32 width, u32 height, u32 bpp) {
@@ -106,6 +178,8 @@ void svga_draw_rect_outline(VMW_SVGA_Driver *svga, s32 x, s32 y, s32 width, s32 
 			vram[(x1-1) + cy  * screen_width] = color;
 		}
 	}
+
+	svga_cmd_update_rect(svga, x0, y0, x1-x0, y1-y0);
 }
 
 void svga_draw_rect(VMW_SVGA_Driver *svga, s32 x, s32 y, s32 width, s32 height, u32 color) {
@@ -138,11 +212,21 @@ void svga_draw_rect(VMW_SVGA_Driver *svga, s32 x, s32 y, s32 width, s32 height, 
 	}
 }
 
+void svga_draw_cirle(VMW_SVGA_Driver *svga, s32 x, s32 y, u32 radius, u32 color) {
+	
+}
+
 void svga_clear_screen(VMW_SVGA_Driver *svga, u32 color) {
 	u32 screen_width = svga_read_reg(svga, SVGA_REG_WIDTH);
 	u32 screen_height = svga_read_reg(svga, SVGA_REG_HEIGHT);
 
 	svga_draw_rect(svga, 0, 0, screen_width, screen_height, color);
+}
+
+void svga_update_screen(VMW_SVGA_Driver *svga) {
+	u32 screen_width = svga_read_reg(svga, SVGA_REG_WIDTH);
+	u32 screen_height = svga_read_reg(svga, SVGA_REG_HEIGHT);
+	svga_cmd_update_rect(svga, 0, 0, screen_width, screen_height);
 }
 
 void create_svga_driver(Pci_Device_Config *header) {
@@ -201,13 +285,25 @@ void create_svga_driver(Pci_Device_Config *header) {
     }
 
     map_page_table(table, DRIVER_SAFE_USERLAND_VIRTUAL_ADDRESS);
-    // map_page_table(table2, DRIVER_SAFE_USERLAND_VIRTUAL_ADDRESS + 0x400000);
+    map_page_table(table2, DRIVER_SAFE_USERLAND_VIRTUAL_ADDRESS + 0x400000);
 
     for (u32 phys = 0; phys < fb_size / 4; phys += PAGE_SIZE) {
 		map_page(phys + fb_start, DRIVER_SAFE_USERLAND_VIRTUAL_ADDRESS + phys, PAGE_PRESENT | PAGE_READ_WRITE | PAGE_DO_NOT_CACHE);
 	}
 
-	// for (u32 phys, mem_start, phys < mem_size)
+	for (u32 phys = 0; phys < mem_size; phys += PAGE_SIZE) {
+		map_page(phys + mem_start, DRIVER_SAFE_USERLAND_VIRTUAL_ADDRESS + 0x400000 + phys, PAGE_PRESENT | PAGE_READ_WRITE | PAGE_DO_NOT_CACHE);
+	}
+
+	u32 *fifo = reinterpret_cast<u32 *>(DRIVER_SAFE_USERLAND_VIRTUAL_ADDRESS + 0x400000);
+	fifo[SVGA_FIFO_MIN] = 16;
+	fifo[SVGA_FIFO_MAX]  = 16 + (10 * 1024);
+	fifo[SVGA_FIFO_NEXT_CMD] = 16;
+	fifo[SVGA_FIFO_STOP] = 16;
+
+	svga->bounce_buffer = reinterpret_cast<u32 *>(heap_alloc(4096));
+	svga->bounce_buffer_allocated = 4096 / 4;
+	svga->bounce_buffer_count = 0;
 
 	u32 max_width = svga_read_reg(svga, SVGA_REG_MAX_WIDTH);
 	u32 max_height = svga_read_reg(svga, SVGA_REG_MAX_HEIGHT);
