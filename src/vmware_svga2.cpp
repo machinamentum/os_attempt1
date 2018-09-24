@@ -49,8 +49,8 @@ void svga_write_reg(VMW_SVGA_Driver *svga, u32 reg, u32 value) {
 }
 
 void svga_set_enable(VMW_SVGA_Driver *svga, u32 val) {
-	svga_write_reg(svga, SVGA_REG_ENABLE, 1);
-	svga_write_reg(svga, SVGA_REG_CONFIG_DONE, 1);
+	svga_write_reg(svga, SVGA_REG_ENABLE, val);
+	if (val) svga_write_reg(svga, SVGA_REG_CONFIG_DONE, 1);
 
 	u32 en = svga_read_reg(svga, SVGA_REG_ENABLE);
 	kprint("EN: %u\n", en);
@@ -71,6 +71,78 @@ void svga_set_mode(VMW_SVGA_Driver *svga, u32 width, u32 height, u32 bpp) {
 	svga_read_reg(svga, SVGA_REG_RED_MASK);
 	svga_read_reg(svga, SVGA_REG_GREEN_MASK);
 	svga_read_reg(svga, SVGA_REG_BLUE_MASK);
+}
+
+void svga_draw_rect_outline(VMW_SVGA_Driver *svga, s32 x, s32 y, s32 width, s32 height, u32 color) {
+	u32 screen_width = svga_read_reg(svga, SVGA_REG_WIDTH);
+	u32 screen_height = svga_read_reg(svga, SVGA_REG_HEIGHT);
+	u32 bpp = svga_read_reg(svga, SVGA_REG_BITS_PER_PIXEL);
+
+	kassert(bpp == 32);
+
+	s32 x0 = x;
+	s32 y0 = y;
+	s32 x1 = x + width;
+	s32 y1 = y + height;
+	
+	if (x1 < 0) return;
+	if (y1 < 0) return;
+
+	if (x0 < 0) x0 = 0;
+	if (y0 < 0) y0 = 0;
+
+	if (x1 > screen_width) x1 = screen_width;
+	if (y1 > screen_height) y1 = screen_height;
+
+	u32 offset = svga_read_reg(svga, SVGA_REG_FB_OFFSET);
+	u32 *vram = reinterpret_cast<u32 *>(DRIVER_SAFE_USERLAND_VIRTUAL_ADDRESS + offset);
+	for (s32 cy = y0; cy < y1; ++cy) {
+		if (cy == y0 || cy == y1-1) {
+			for (s32 cx = x0; cx < x1; ++cx) {
+				vram[cx + cy * screen_width] = color;
+			}
+		} else {
+			vram[x0 + cy  * screen_width] = color;
+			vram[(x1-1) + cy  * screen_width] = color;
+		}
+	}
+}
+
+void svga_draw_rect(VMW_SVGA_Driver *svga, s32 x, s32 y, s32 width, s32 height, u32 color) {
+	u32 screen_width = svga_read_reg(svga, SVGA_REG_WIDTH);
+	u32 screen_height = svga_read_reg(svga, SVGA_REG_HEIGHT);
+	u32 bpp = svga_read_reg(svga, SVGA_REG_BITS_PER_PIXEL);
+
+	kassert(bpp == 32);
+
+	s32 x0 = x;
+	s32 y0 = y;
+	s32 x1 = x + width;
+	s32 y1 = y + height;
+	
+	if (x1 < 0) return;
+	if (y1 < 0) return;
+
+	if (x0 < 0) x0 = 0;
+	if (y0 < 0) y0 = 0;
+
+	if (x1 > screen_width) x1 = screen_width;
+	if (y1 > screen_height) y1 = screen_height;
+
+	u32 offset = svga_read_reg(svga, SVGA_REG_FB_OFFSET);
+	u32 *vram = reinterpret_cast<u32 *>(DRIVER_SAFE_USERLAND_VIRTUAL_ADDRESS + offset);
+	for (s32 cy = y0; cy < y1; ++cy) {
+		for (s32 cx = x0; cx < x1; ++cx) {
+			vram[cx + cy * screen_width] = color;
+		}
+	}
+}
+
+void svga_clear_screen(VMW_SVGA_Driver *svga, u32 color) {
+	u32 screen_width = svga_read_reg(svga, SVGA_REG_WIDTH);
+	u32 screen_height = svga_read_reg(svga, SVGA_REG_HEIGHT);
+
+	svga_draw_rect(svga, 0, 0, screen_width, screen_height, color);
 }
 
 void create_svga_driver(Pci_Device_Config *header) {
@@ -104,7 +176,6 @@ void create_svga_driver(Pci_Device_Config *header) {
     		break;
     	}
 	}
-
 
 
 	u32 fb_size = svga_read_reg(svga, SVGA_REG_FB_SIZE);
@@ -162,11 +233,12 @@ void create_svga_driver(Pci_Device_Config *header) {
 
 	kprint("Offset: %X\n", offset);
 
-	u32 *vram = reinterpret_cast<u32 *>(DRIVER_SAFE_USERLAND_VIRTUAL_ADDRESS);
-	for (u32 i = offset; i < fb_size / 4; i += 4) {
-		vram[i/4] = 0xFFFFFFFF;
-	}
+	svga_clear_screen(svga, 0xFFFFFFFF);
+	svga_draw_rect(svga, 10, 10, 100, 100, 0xFFFF0000);
+	// svga_clear_screen(svga, 0);
+
+	// svga_set_enable(svga, 0);
 	
-	for (;;) asm("hlt");
+	// for (;;) asm("hlt");
 
 }

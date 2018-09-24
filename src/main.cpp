@@ -678,6 +678,8 @@ void pci_enumerate_devices() {
 void create_ide_driver(Pci_Device_Config *header);
 void create_svga_driver(Pci_Device_Config *header);
 
+void kernel_shell();
+
 extern "C"
 void kernel_main(Multiboot_Information *info) {
     asm("cli");
@@ -731,18 +733,168 @@ void kernel_main(Multiboot_Information *info) {
         }
 
         if (it.vendor_id == PCI_VENDOR_ID_VMWARE && it.device_id == PCI_DEVICE_ID_VMWARE_SVGA2) {
-            // create_svga_driver(&it);
+            create_svga_driver(&it);
         }
     }
 
-    kerror("END!");
+    kernel_shell();
+
     for(;;) {
+        asm("hlt");
+    }
+}
+
+#include "nuklear.h"
+
+float nuklear_font_width(nk_handle handle, float h, const char* text, int len) {
+    return 0;
+}
+
+extern struct VMW_SVGA_Driver {
+    u16 index_port;
+    u16 value_port;
+    u16 bios_port;
+    u16 irqstatus_port;
+} svga_driver;
+
+void svga_draw_rect(VMW_SVGA_Driver *svga, s32 x, s32 y, s32 width, s32 height, u32 color);
+void svga_clear_screen(VMW_SVGA_Driver *svga, u32 color);
+void svga_draw_rect_outline(VMW_SVGA_Driver *svga, s32 x, s32 y, s32 width, s32 height, u32 color);
+
+struct nk_context ctx;
+
+void kernel_shell() {
+
+    enum {EASY, HARD};
+    static int op = EASY;
+    static float value = 0.6f;
+    static int i =  20;
+    struct nk_user_font font;
+
+    font.userdata.ptr = nullptr;
+    font.height = 10;
+    font.width = nuklear_font_width;
+
+    #define NK_MEM (PAGE_SIZE * 64)
+    // // 0x1000000
+
+    nk_init_fixed(&ctx, heap_alloc(NK_MEM), NK_MEM, &font);
+
+    while (true) {
         for (s64 i = 0; i < keyboard_event_queue.count; i++) {
             Input in = keyboard_event_queue[i];
             if (in.action != KEY_PRESS) continue;
-            kprint("%c", in.utf8_code[0]);
+            
+            // @TODO send KB to WM 
+            // kprint("%c", in.utf8_code[0]);
         }
+        // @FixMe this needs a lock around it, or we need to disable keyboard IRQs
         keyboard_event_queue.clear();
+
+        // continue;
+
+        if (nk_begin(&ctx, "Show", nk_rect(50, 50, 220, 220),
+         NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_CLOSABLE)) {
+            // fixed widget pixel width
+            nk_layout_row_static(&ctx, 30, 80, 1);
+            if (nk_button_label(&ctx, "button")) {
+                // event handling
+            }
+
+            // fixed widget window ratio width
+            nk_layout_row_dynamic(&ctx, 30, 2);
+            if (nk_option_label(&ctx, "easy", op == EASY)) op = EASY;
+            if (nk_option_label(&ctx, "hard", op == HARD)) op = HARD;
+
+            // custom widget pixel width
+            nk_layout_row_begin(&ctx, NK_STATIC, 30, 2);
+            {
+                nk_layout_row_push(&ctx, 50);
+                nk_label(&ctx, "Volume:", NK_TEXT_LEFT);
+                nk_layout_row_push(&ctx, 110);
+                nk_slider_float(&ctx, 0, &value, 1.0f, 0.1f);
+            }
+            nk_layout_row_end(&ctx);
+        }
+        nk_end(&ctx);
+
+        svga_clear_screen(&svga_driver, 0xFF272822);
+        const struct nk_command *it = 0;
+        nk_foreach(it, &ctx) {
+            switch (it->type) {
+                case NK_COMMAND_RECT_FILLED: {
+                    nk_command_rect_filled *rect = (nk_command_rect_filled *) it;
+                    u32 c = nk_color_u32(rect->color);
+                    svga_draw_rect(&svga_driver, rect->x, rect->y, rect->w, rect->h, c);
+                } break;
+                case NK_COMMAND_RECT_MULTI_COLOR:
+                    // rect := cast(*nk_command_rect_multi_color) it;
+                    // left := make_Color(nk_color_cf(rect.left));
+                    // right := make_Color(nk_color_cf(rect.right));
+                    // bottom := make_Color(nk_color_cf(rect.bottom));
+                    // top := make_Color(nk_color_cf(rect.top));
+
+                    // // print("left: %\n", left);
+                    // // print("right: %\n", right);
+                    // // print("top: %\n", top);
+                    // // print("bottom: %\n", bottom);
+                    // // if bottom.r == 0 && bottom.g == 0 && bottom.b == 0 then assert(false);
+
+                    // draw_rect_multi_color(<<renderer, cast(float) rect.x, cast(float) rect.y, cast(float) rect.w, cast(float) rect.h, left, right, top, bottom);
+                
+                    break;
+                case NK_COMMAND_RECT: {
+                    nk_command_rect *rect = (nk_command_rect *) it;
+                    u32 c = nk_color_u32(rect->color);
+                    svga_draw_rect_outline(&svga_driver, rect->x, rect->y, rect->w, rect->h, c);
+                } break;
+                case NK_COMMAND_TEXT:
+                    // tex := cast(*nk_command_text) it;
+                    // color := make_Color(nk_color_cf(tex.foreground));
+                    // font := cast(*Font) tex.font.userdata.ptr;
+                    // text: string;
+                    // text.count = tex.length;
+                    // text.data = tex.string.data;
+                    // draw_text(<<renderer, <<font, cast(float) tex.x, cast(float) tex.y + (font.char_height * 3) / 4, text, color=color);
+
+                    break;
+                case NK_COMMAND_CIRCLE_FILLED:
+                    // circ := cast(*nk_command_circle_filled) it;
+                    // assert(circ.w == circ.h);
+                    // c := nk_color_cf(circ.color);
+                    // draw_circle(<<renderer, cast(float) circ.x, cast(float) circ.y, cast(float) circ.w / 2, make_Color(c));
+
+                    break;
+                case NK_COMMAND_LINE:
+                    // line := cast(*nk_command_line) it;
+                    // make_Vector2 :: (v: nk_vec2i) -> Vector2 {
+                    //     return make_Vector2(cast(float) v.x, cast(float) v.y);
+                    // }
+                    // v1 := make_Vector2(line.begin);
+                    // v2 := make_Vector2(line.end);
+                    // c := nk_color_cf(line.color);
+                    // draw_line(<<renderer, v1, v2, make_Color(c), cast(float) line.line_thickness);
+
+                    break;
+                case NK_COMMAND_SCISSOR:
+                    // sci := cast(*nk_command_scissor) it;
+                    // v := make_Viewport(sci.x, sci.y, sci.w, sci.h);
+                    // if sci.x == -8192 then
+                    //     disable_scissor();
+                    // else {
+                    //     off := v.y + cast(s32) v.h;
+                    //     if renderer.current_frame_buffer then v.y = cast(s32) renderer.current_frame_buffer.viewport.h - off;
+                    //     else v.y = cast(s32) renderer.game.window.height - off;
+
+                    //     enable_scissor(v);
+                    // }
+                    break;
+                default:
+                    // kprint("cmd: %\n", it->type);
+                {}
+            }
+        }
+
         asm("hlt");
     }
 }
