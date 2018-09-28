@@ -14,12 +14,12 @@ void Vga::scroll_one_line() {
         u16 *src = &buffer[(i * VGA_WIDTH)];
         memcpy(dst, src, sizeof(u16) * VGA_WIDTH);
     }
-
+    
     for (u64 x = 0; x < VGA_WIDTH; ++x) {
         u64 index = x + VGA_WIDTH * (VGA_HEGIHT-1);
         buffer[index] = value;
     }
-
+    
     buffer_cursor_pos_x = 0;
     buffer_cursor_pos_y--;
 }
@@ -32,17 +32,17 @@ void Vga::print_valist(String fmt, va_list a_list) {
             if (i < fmt.length-1) {
                 ++i;
                 c = fmt.data[i];
-
+                
                 int size = 4;
                 // if (c == 'l') {
                 //     size = 8;
-
+                
                 //     if (i < fmt.length-1) {
                 //         ++i;
                 //         c = fmt.data[i];
                 //     }
                 // }
-
+                
                 if (c == 'u') {
                     if (size == 4) write_u32_decimal(va_arg(a_list, u32));
                     // else if (size == 8) write_u64_decimal(va_arg(a_list, u64));
@@ -61,7 +61,7 @@ void Vga::print_valist(String fmt, va_list a_list) {
                     write_u32_hex(va_arg(a_list, u32), false);
                 } else if (c == 'p') {
                     void *value = va_arg(a_list, void *);
-
+                    
                     write('0');
                     write('x');
                     if (sizeof(void *) == sizeof(u32)) {
@@ -72,6 +72,9 @@ void Vga::print_valist(String fmt, va_list a_list) {
                 } else if (c == 'c') {
                     u32 value = va_arg(a_list, u32);
                     write(static_cast<u8>(value));
+                } else if (c == 'f') {
+                    float64 value = va_arg(a_list, float64);
+                    write_float64(value);
                 } else {
                     // @TODO
                     write(c);
@@ -92,6 +95,50 @@ void Vga::print(String fmt, ...) {
     va_end(a_list);
 }
 
+void Vga::write_float64(float64 value) {
+    u64 x;
+    
+    // this is totally garbage, in order to avoid strict-aliasing
+    // rules here, we have to memcpy in stead of a reinterpret_cast, sigh
+    kassert(sizeof(x) == sizeof(value));
+    memcpy(&x, &value, sizeof(value));
+    
+    // @Incomplete
+    /*
+    u8 exp = (x >> 23) & 0xFF;
+    u32 sig = (x) & 0x7FFFFF;
+    
+    if (x & 0x80000000) {
+        write('-');
+    }
+    
+    if (exp == 0xFF) {
+        if (sig == 0) {
+            write("(inf)");
+        } else {
+            write("(Nan)");
+        }
+    } else if (exp == 0x00) {
+        if (sig == 0) {
+            write("0.000000");
+        } else {
+            // @TODO maybe represent denormalized numbers in some way?
+            write("0.000000");
+        }
+    } else {
+        s8 exp_v = exp - 127;
+        
+        if (exp_v < 0) {
+            write('0');
+            write('.');
+            while (exp_v % 8) {
+            
+            }
+        }
+    }
+*/
+}
+
 void Vga::write_u64_hex(u64 value, bool upper) {
     write_u32_hex((value >> 32) & 0xFFFFFFFF, upper);
     write_u32_hex(value & 0xFFFFFFFF, upper);
@@ -101,7 +148,7 @@ void Vga::write_u32_hex(u32 value, bool upper) {
     char *hex_values;
     if (upper) hex_values = "0123456789ABCDEF";
     else hex_values       = "0123456789abcdef";
-
+    
     for (int i = 0; i < 8; ++i) {
         u32 v = (value >> ((7 - i)*4)) & 0xF;
         write(hex_values[v]);
@@ -113,12 +160,12 @@ void Vga::write_u32_decimal(u32 value) {
     char buffer[11];
     zero_memory(&buffer, sizeof(buffer));
     u8 index = 0;
-
+    
     do {
         buffer[index++] = dec_values[value % 10];
         value /= 10;
     } while (value > 0);
-
+    
     for (int i = 10; i >= 0; --i) {
         char c = buffer[i];
         if (c == 0) continue;
@@ -127,7 +174,7 @@ void Vga::write_u32_decimal(u32 value) {
 }
 
 void Vga::write_s32_decimal(s32 value) {
-     if (value < 0) {
+    if (value < 0) {
         write('-');
         value = -value;
     }
@@ -142,7 +189,7 @@ void Vga::write(u8 c) {
         if (buffer_cursor_pos_y >= VGA_HEGIHT) {
             scroll_one_line();
         }
-
+        
         set_cursor_coordinates(buffer_cursor_pos_x, buffer_cursor_pos_y);
         return;
     }
@@ -183,6 +230,8 @@ void Vga::clear_screen() {
     buffer_cursor_pos_y = 0;
 }
 
+
+// TODO(josh): cleanup these hardcoded-values
 void Vga::enable_cursor(bool enable) {
     if (enable) {
         _port_io_write_u8(0x3D4, 0x0A);

@@ -11,7 +11,8 @@ SET COMMON_FLAGS=%INCLUDE_PATHS% -std=c++11 -ffreestanding -O2 -Wall -Wextra -Wn
 %TOOLCHAIN%\i686-elf-gcc -c src\ide.cpp          -o ide.o          %COMMON_FLAGS%
 %TOOLCHAIN%\i686-elf-gcc -c src\vmware_svga2.cpp -o vmware_svga2.o %COMMON_FLAGS%
 %TOOLCHAIN%\i686-elf-gcc -c src\nuklear.c        -o nuklear.o      %COMMON_FLAGS%
+%TOOLCHAIN%\i686-elf-gcc -c src\math.cpp         -o math.o         %COMMON_FLAGS%
 
-%TOOLCHAIN%\i686-elf-ld -T linker.ld -o myos.bin -O2 -static -nostdlib boot.o main.o interrupts.o vga.o heap.o ide.o vmware_svga2.o nuklear.o
+%TOOLCHAIN%\i686-elf-ld -T linker.ld -o myos.bin -O2 -static -nostdlib boot.o main.o interrupts.o vga.o heap.o ide.o vmware_svga2.o nuklear.o math.o
 
 del *.o

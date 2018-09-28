@@ -19,7 +19,10 @@ SECTIONS
 	.data ALIGN(4K) : AT(ADDR(.data) - __KERNEL_VIRTUAL_BASE)
 	{
 		*(COMMON)
+		*(.data)
 		*(.bss)
 	}
-	__KERNEL_MEMORY_END = ALIGN(4K);
+
+	. = ALIGN(4K) ;
+	__KERNEL_MEMORY_END = .;
 }

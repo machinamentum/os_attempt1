@@ -10,7 +10,7 @@ struct Multiboot_Mmap {
     u32 size;
     u64 base_addr;
     u64 length;
-
+    
     enum {
         MEMORY_AVAILABLE = 1,
         MEMORY_RESERVED = 2,
@@ -61,7 +61,7 @@ String temp_string(char *c_string) {
 void memcpy(void *dst, void *src, u32 num) {
     u8 *_dst = reinterpret_cast<u8 *>(dst);
     u8 *_src = reinterpret_cast<u8 *>(src);
-
+    
     for (u32 i = 0; i < num; ++i) {
         _dst[i] = _src[i];
     }
@@ -72,7 +72,7 @@ void  *zero_memory(void *_dst, u32 size) {
     for (u32 i = 0; i < size; ++i) {
         dst[i] =  0;
     }
-
+    
     return _dst;
 }
 
@@ -95,24 +95,25 @@ u32 num_bitmap_entries;
 void mark_page_as_used(u32 physical) {
     kassert((physical & (PAGE_SIZE-1)) == 0);
     kassert(physical >= 0x00100000);
-
+    
     u32 page_number = ((physical - 0x00100000) / PAGE_SIZE);
     u32 bitmap_index = page_number / BITMAP_NUM_PAGES;
     u32 buffer_index = (page_number / 32) % BITMAP_BUFFER_COUNT;
     u32 page_bit = page_number % 32;
-
+    
+    
     bitmap_entries[bitmap_index].buffer[buffer_index] |= (1 << page_bit);
 }
 
 void mark_page_as_free(u32 physical) {
     kassert((physical & (PAGE_SIZE-1)) == 0);
     kassert(physical >= 0x00100000);
-
+    
     u32 page_number = ((physical - 0x00100000) / PAGE_SIZE);
     u32 bitmap_index = page_number / BITMAP_NUM_PAGES;
     u32 buffer_index = (page_number / 32) % BITMAP_BUFFER_COUNT;
     u32 page_bit = page_number % 32;
-
+    
     bitmap_entries[bitmap_index].buffer[buffer_index] &= ~(1 << page_bit);
 }
 
@@ -121,7 +122,7 @@ void mark_page_range_as_used(u32 physical_start, u32 physical_end) {
     kassert((physical_start & (PAGE_SIZE-1)) == 0);
     kassert((physical_end & (PAGE_SIZE-1)) == 0);
     kassert(physical_start <= physical_end);
-
+    
     // @Speed there's probably a faster way to mark large memory regions as used
     for (; physical_start <= physical_end; physical_start += PAGE_SIZE) {
         mark_page_as_used(physical_start);
@@ -133,14 +134,14 @@ u32 maybe_take_ownership_of_num_pages(u32 num) {
         upper_memory_size_pages = 0;
         return out;
     }
-
+    
     upper_memory_size_pages -= num;
     return num;
 }
 
 void make_bitmap_entry(Bitmap_Entry *entry, u32 range_start, u32 num_pages, u32 *bitmap) {
     kassert(num_pages && "cannot make a bitmap entry of zero size!");
-
+    
     entry->range_start = range_start;
     entry->range_end = range_start + (num_pages * PAGE_SIZE);
     entry->buffer = bitmap;
@@ -149,13 +150,13 @@ void make_bitmap_entry(Bitmap_Entry *entry, u32 range_start, u32 num_pages, u32 
 u32 next_free_page() {
     for (s64 i = 0; i < bitmap_entries.count; ++i) {
         auto entry = bitmap_entries[i];
-
+        
         // @TODO i'm pretty sure this drops a handful of pages if we have a number of pages that don't divide evenly into 32
         u32 buffer_count = ((entry.range_end - entry.range_start) / PAGE_SIZE) / 32;
         for (u32 j = 0; j < buffer_count; ++j) {
             u32 value = entry.buffer[j];
             if (value == 0xFFFFFFFF) continue;
-
+            
             for (int k = 0; k < 32; ++k) {
                 if (((value >> k) & 1) == 0) {
                     u32 page = (k * PAGE_SIZE) + (j * 32 * PAGE_SIZE) + entry.range_start;
@@ -165,38 +166,39 @@ u32 next_free_page() {
             }
         }
     }
-
+    
     return 0;
 }
 
 void page_allocator_init() {
     u32 total_num_pages = upper_memory_size_pages;
-
+    
     zero_memory(&initial_memory_use_bitmap, sizeof(initial_memory_use_bitmap));
     make_bitmap_entry(&initial_bitmap_entry, 0x00100000, maybe_take_ownership_of_num_pages(BITMAP_NUM_PAGES), &initial_memory_use_bitmap[0]);
+    
     bitmap_entries.data = &initial_bitmap_entry;
     bitmap_entries.allocated = 1;
     bitmap_entries.count = 1;
     
-    extern int __KERNEL_MEMORY_START;
-    extern int __KERNEL_MEMORY_END;
-
-    u32 kstart = (u32)&__KERNEL_MEMORY_START;
-    u32 kend = (u32)&__KERNEL_MEMORY_END;
-
+    extern u8 __KERNEL_MEMORY_START[];
+    extern u8 __KERNEL_MEMORY_END[];
+    
+    u32 kstart = (u32)__KERNEL_MEMORY_START;
+    u32 kend = (u32)__KERNEL_MEMORY_END;
+    
     kprint("kernel physical address: %X\n", kstart - KERNEL_VIRTUAL_BASE_ADDRESS);
     kprint("kernel end:              %X\n", kend - KERNEL_VIRTUAL_BASE_ADDRESS);
-
+    
     // mark kernel area as in use
     mark_page_range_as_used(kstart - KERNEL_VIRTUAL_BASE_ADDRESS, kend - KERNEL_VIRTUAL_BASE_ADDRESS);
-
+    
     // // now that we have a base tracker we can dynamically allocate
     // // a region for bitmaps to track all of availabe physical memory
     // bitmap_entries.resize((total_num_pages / BITMAP_NUM_PAGES) + ((total_num_pages % BITMAP_NUM_PAGES) ? 1 : 0));
-
+    
     // kprint("Total ram size: %u MB\n", (total_num_pages * PAGE_SIZE) / (1024*1024));
     // kprint("Bitmap entry count: %d\n", bitmap_entries.count);
-
+    
     // for (s64 i = 1; i < bitmap_entries.count; ++i) {
     //     auto last_etry = *bitmap_entries[i-1];
     //     u32 num_pages = maybe_take_ownership_of_num_pages(BITMAP_NUM_PAGES);
@@ -259,7 +261,7 @@ void map_page(u32 physical, u32 virtual_addr, u32 flags) {
         }
         pd[dir_index] = virtual_to_physical_address((u32) table) | PAGE_PRESENT | PAGE_READ_WRITE;
         flush_tlb(); // @Cleanup invalidate the page?
-
+        
         // it should be accessible now!
         pt = ((u32 *) 0xFFC00000) + (0x400 * dir_index);
     }
@@ -276,7 +278,7 @@ void unmap_page(u32 virtual_addr) {
     
     if (!(pd[dir_index] & PAGE_PRESENT)) return;
     if (!(pt[table_index] & PAGE_PRESENT)) return;
-
+    
     pt[table_index] = PAGE_READ_WRITE;
 }
 
@@ -290,11 +292,12 @@ void unmap_page_table(u32 dir_index) {
 void map_page_table(u32 *table, u32 virtual_addr) {
     u32 table_physical = virtual_to_physical_address(reinterpret_cast<u32>(table));
     u32 dir_index = virtual_addr >> 22;
-
+    
     u32 *pd = (u32 *) 0xFFFFF000;
     pd[dir_index] = table_physical | PAGE_PRESENT | PAGE_READ_WRITE;
     flush_tlb(); // are we supposed to invalidate the directory or the table?
 }
+
 
 // operates in physical address space!
 // should only be called by boot.s!
@@ -303,7 +306,7 @@ u32 *init_page_table_directory() {
     u32 *pd = (u32 *)(((u32)&page_directory) - KERNEL_VIRTUAL_BASE_ADDRESS);
     u32 *pt = (u32 *)(((u32)&first_page_table) - KERNEL_VIRTUAL_BASE_ADDRESS);
     u32 *hpt = (u32 *)(((u32)&heap_page_table) - KERNEL_VIRTUAL_BASE_ADDRESS);
-
+    
     for (int i = 0; i < 1024; ++i) {
         pd[i] = PAGE_READ_WRITE;
     }
@@ -311,7 +314,7 @@ u32 *init_page_table_directory() {
     for (int i = 0; i < 1024; ++i) {
         pt[i] = (i * PAGE_SIZE) | PAGE_PRESENT | PAGE_READ_WRITE;
     }
-
+    
     for (int i = 0; i < 1024; ++i) {
         hpt[i] = PAGE_READ_WRITE;
     }
@@ -319,7 +322,7 @@ u32 *init_page_table_directory() {
     u32 dir_index = KERNEL_VIRTUAL_BASE_ADDRESS >> 22;
     pd[0] = ((u32) pt) | PAGE_PRESENT | PAGE_READ_WRITE;
     pd[dir_index] = ((u32) pt) | PAGE_PRESENT | PAGE_READ_WRITE;
-
+    
     dir_index = HEAP_VIRTUAL_BASE_ADDRESS >> 22;
     pd[dir_index] = ((u32) hpt) | PAGE_PRESENT | PAGE_READ_WRITE;
     
@@ -517,14 +520,14 @@ void ps2_initialize() {
     set_irq_mask(1);
     ps2_disable_devices();
     ps2_flush_output_buffers();
-
+    
     _port_io_write_u8(PS2_COMMAND, PS2_CMD_READ_BYTE0);
     ps2_wait_for_response();
     u8 config_byte = _port_io_read_u8(PS2_DATA);
     kprint("Config: 0x%X\n", config_byte);
     // disable interrupts and port scancode set translation
     config_byte &= ~(PS2_CONFIG_PORT_1_INTERRUPT_BIT | PS2_CONFIG_PORT_2_INTERRUPT_BIT | PS2_CONFIG_PORT_1_TRANSLATION_BIT);
-
+    
     if (config_byte & PS2_CONFIG_PORT_2_CLOCK_BIT) {
         ps2_info.num_channels = 2;
     } else {
@@ -532,13 +535,13 @@ void ps2_initialize() {
         // port 1 is always active (unless the device is disconnected, maybe)
         ps2_info.num_channels = 1;
     }
-
+    
     _io_wait();
     _port_io_write_u8(PS2_COMMAND, PS2_CMD_WRITE_BYTE0);
     ps2_wait_for_input_ready();
     _port_io_write_u8(PS2_DATA, config_byte);
     ps2_wait_for_input_ready();
-
+    
     _port_io_write_u8(PS2_COMMAND, PS2_CMD_CONTROLLER_TEST);
     ps2_wait_for_response();
     u8 response = _port_io_read_u8(PS2_DATA);
@@ -546,28 +549,28 @@ void ps2_initialize() {
         kprint("response: %X\n", response);
         kassert(false);
     }
-
+    
     // @TODO maybe do a more thorough test for dual channel support
-
+    
     _port_io_write_u8(PS2_COMMAND, PS2_CMD_PORT_1_TEST);
     ps2_wait_for_response();
     response = _port_io_read_u8(PS2_DATA);
     kprint("response: %X\n", response);
     kassert(response == 0x00);
-
+    
     config_byte |= (PS2_CONFIG_PORT_1_INTERRUPT_BIT | PS2_CONFIG_PORT_2_INTERRUPT_BIT);
     _port_io_write_u8(PS2_COMMAND, PS2_CMD_WRITE_BYTE0);
     ps2_wait_for_input_ready();
     _port_io_write_u8(PS2_DATA, config_byte);
-
+    
     ps2_wait_for_input_ready();
     ps2_enable_devices();
-
+    
     ps2_wait_for_input_ready();
     _port_io_write_u8(PS2_DATA, 0xFF);
     ps2_wait_for_response();
     response = _port_io_read_u8(PS2_DATA);
-
+    
     // The osdev wiki authors seem unsure what the actual behavio is here (getting 0xFA then 0xAA or vice versa)
     kassert(response == 0xFA);
     ps2_wait_for_response();
@@ -577,11 +580,11 @@ void ps2_initialize() {
         kprint("response: %X\n", response);
         kassert(false);
     }
-
+    
     if (ps2_info.num_channels == 2) {
         // @TODO test second port
     }
-
+    
     ps2_wait_for_input_ready();
     _port_io_write_u8(PS2_DATA, 0xF3);
     ps2_wait_for_input_ready();
@@ -589,7 +592,7 @@ void ps2_initialize() {
     ps2_wait_for_response();
     response = _port_io_read_u8(PS2_DATA);
     kassert(response == 0xFA);
-
+    
     clear_irq_mask(1);
 }
 
@@ -619,7 +622,7 @@ u16 pic_check_vendor(u8 bus, u8 slot, u8 function) {
 void pci_enable_memory(Pci_Device_Config *config) {
     u32 command = config->command | 0x0007;
     u32 packet = command;
-
+    
     u8 bus = config->bus;
     u8 slot = config->slot;
     u8 func = config->function;
@@ -630,7 +633,7 @@ bool pci_read_device_config(Pci_Device_Config *header, u32 bus, u32 slot, u32 fu
     kassert(bus < PCI_MAX_BUSES);
     kassert(slot < PCI_MAX_DEVICES_PER_BUS);
     kassert(function < PCI_MAX_FUNCTIONS_PER_DEVICE);
-
+    
     if (pic_check_vendor(bus, slot, function) == 0xFFFF) return false;
     
     // kassert(sizeof(Pci_Device_Config) == 256);
@@ -638,7 +641,7 @@ bool pci_read_device_config(Pci_Device_Config *header, u32 bus, u32 slot, u32 fu
     for (u32 i = 0; i < 256/sizeof(u32); ++i) {
         hdr[i] = pci_read_u32(bus, slot, function, i*sizeof(u32));
     }
-
+    
     return true;
 }
 
@@ -655,13 +658,13 @@ void pci_enumerate_devices() {
     for (u16 bus = 0; bus < PCI_MAX_BUSES; ++bus) {
         for (u8 device = 0; device < PCI_MAX_DEVICES_PER_BUS; ++device) {
             Pci_Device_Config hdr;
-
+            
             hdr.bus = bus;
             hdr.slot = device;
             hdr.function = 0;
             if (pci_read_device_config(&hdr, bus, device, 0)) {
                 pci_devices.add(hdr);
-
+                
                 if (hdr.header_type & PCI_HEADER_MULTIFUNCTION_BIT) {
                     for (u8 func = 1; func < PCI_MAX_FUNCTIONS_PER_DEVICE; ++func) {
                         hdr.function = func;
@@ -706,23 +709,29 @@ void kernel_main(Multiboot_Information *info) {
     init_interrupt_descriptor_table();
     pic_remap(0x20, 0x28);
     kprint("done\n");
-
+    
     ps2_initialize();
     asm("sti");
-
+    
     page_allocator_init();
+    
     init_heap();
-
+    
     kprint("Kernel is at physical addr: %X\n", virtual_to_physical_address(KERNEL_VIRTUAL_BASE_ADDRESS + 0x00100000));
-
+    
+    // kprint("Image begins at phys: %X\n", virtual_to_physical_address((u32) image_data));
+    // kprint("Image ends at phsy: %X\n", virtual_to_physical_address((u32)((&image_data[0]) + 24624)));
+    
+    // for (;;) asm("hlt");
+    
     // kprint("Testing interrupt...");
     // kprint("done\n");
-
+    
     pci_enumerate_devices();
-
+    
     For (pci_devices) print_pci_header(&it);
-
-
+    
+    
     // @TODO we need to create a streamlined way to managed drivers that are built into the kernel's binary and driver's that are loaded
     // from the file system. Maybe. Perhaps the inital drivers are in the kernel and then proper drivers are loaded at runtime and they
     // fully replace the kernel drivers. This causes some dead code in the kernel, but such code will be in small amounts since we only
@@ -731,23 +740,70 @@ void kernel_main(Multiboot_Information *info) {
         if (it.class_code == PCI_CLASS_MASS_STORAGE_CONTROLLER && it.subclass_code == PCI_SUBCLASS_IDE_CONTROLLER) {
             create_ide_driver(&it);
         }
-
+        
         if (it.vendor_id == PCI_VENDOR_ID_VMWARE && it.device_id == PCI_DEVICE_ID_VMWARE_SVGA2) {
             create_svga_driver(&it);
         }
     }
-
+    
     kernel_shell();
-
+    
     for(;;) {
         asm("hlt");
     }
 }
 
 #include "nuklear.h"
+#include "paris.c"
+
+s32 get_glyph_start_end(u8 glyph, s32 *out_start, s32 *out_end) {
+    if (glyph == ' ') {
+        if (out_start) *out_start = 0;
+        if (out_end)   *out_end = 0;
+        return 6;
+    }
+    
+    if (glyph < ' ' || glyph > 0x7F) {
+        if (out_start) *out_start = 0;
+        if (out_end)   *out_end = 0;
+        return 0;
+    }
+    
+    u8 index = glyph - ' ';
+    
+    s32 start = 0;
+    s32 end = 0;
+    u32 cur_index = -1; // -1 here so that when we hit the first marker, cur_index becomes 0, then when we hit the second marker, cur_index becomes 1 ('!')
+    
+    u32 *data = reinterpret_cast<u32 *>(&image_data[0]);
+    for (s32 i = 0; i < image_width; ++i) {
+        if (data[i] == 0xFFFFFFFF) {
+            start = end;
+            end = i;
+            cur_index++;
+            
+            if (cur_index == index) {
+                if (out_start) *out_start = start;
+                if (out_end)   *out_end = end;
+                return end - start;
+            }
+        }
+    }
+    
+    return 0;
+}
 
 float nuklear_font_width(nk_handle handle, float h, const char* text, int len) {
-    return 0;
+    UNUSED(handle);
+    UNUSED(h);
+    
+    float total = 0;
+    for (int i = 0; i < len; ++i) {
+        char c = text[i];
+        total += get_glyph_start_end((u8) c, nullptr, nullptr);
+        
+    }
+    return total;
 }
 
 extern struct VMW_SVGA_Driver {
@@ -761,26 +817,31 @@ void svga_draw_rect(VMW_SVGA_Driver *svga, s32 x, s32 y, s32 width, s32 height, 
 void svga_clear_screen(VMW_SVGA_Driver *svga, u32 color);
 void svga_draw_rect_outline(VMW_SVGA_Driver *svga, s32 x, s32 y, s32 width, s32 height, u32 color);
 void svga_update_screen(VMW_SVGA_Driver *svga);
+void svga_draw_circle(VMW_SVGA_Driver *svga, s32 x, s32 y, s32 radius, u32 color);
+void svga_copy_line_to_fb(VMW_SVGA_Driver *svga, u8 *buffer, s32 width_in_pixels, s32 x, s32 y, u32 filter_color);
+void svga_cmd_update_rect(VMW_SVGA_Driver *svga, u32 x, u32 y, u32 width, u32 height);
 
 struct nk_context ctx;
 
 void kernel_shell() {
-
+    
     enum {EASY, HARD};
     static int op = EASY;
     static float value = 0.6f;
-    static int i =  20;
+    // static int i =  20;
     struct nk_user_font font;
-
+    
     font.userdata.ptr = nullptr;
-    font.height = 10;
+    font.height = 8;
     font.width = nuklear_font_width;
-
-    #define NK_MEM (PAGE_SIZE * 64)
+    
+#define NK_MEM (PAGE_SIZE * 64)
     // // 0x1000000
-
+    
     nk_init_fixed(&ctx, heap_alloc(NK_MEM), NK_MEM, &font);
-
+    
+    // for (;;) asm("hlt");
+    
     while (true) {
         for (s64 i = 0; i < keyboard_event_queue.count; i++) {
             Input in = keyboard_event_queue[i];
@@ -791,22 +852,22 @@ void kernel_shell() {
         }
         // @FixMe this needs a lock around it, or we need to disable keyboard IRQs
         keyboard_event_queue.clear();
-
+        
         // continue;
-
+        
         if (nk_begin(&ctx, "Show", nk_rect(50, 50, 220, 220),
-         NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_CLOSABLE)) {
+                     NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_CLOSABLE)) {
             // fixed widget pixel width
             nk_layout_row_static(&ctx, 30, 80, 1);
             if (nk_button_label(&ctx, "button")) {
                 // event handling
             }
-
+            
             // fixed widget window ratio width
             nk_layout_row_dynamic(&ctx, 30, 2);
             if (nk_option_label(&ctx, "easy", op == EASY)) op = EASY;
             if (nk_option_label(&ctx, "hard", op == HARD)) op = HARD;
-
+            
             // custom widget pixel width
             nk_layout_row_begin(&ctx, NK_STATIC, 30, 2);
             {
@@ -818,7 +879,7 @@ void kernel_shell() {
             nk_layout_row_end(&ctx);
         }
         nk_end(&ctx);
-
+        
         svga_clear_screen(&svga_driver, 0xFF272822);
         const struct nk_command *it = 0;
         nk_foreach(it, &ctx) {
@@ -829,74 +890,88 @@ void kernel_shell() {
                     svga_draw_rect(&svga_driver, rect->x, rect->y, rect->w, rect->h, c);
                 } break;
                 case NK_COMMAND_RECT_MULTI_COLOR:
-                    // rect := cast(*nk_command_rect_multi_color) it;
-                    // left := make_Color(nk_color_cf(rect.left));
-                    // right := make_Color(nk_color_cf(rect.right));
-                    // bottom := make_Color(nk_color_cf(rect.bottom));
-                    // top := make_Color(nk_color_cf(rect.top));
-
-                    // // print("left: %\n", left);
-                    // // print("right: %\n", right);
-                    // // print("top: %\n", top);
-                    // // print("bottom: %\n", bottom);
-                    // // if bottom.r == 0 && bottom.g == 0 && bottom.b == 0 then assert(false);
-
-                    // draw_rect_multi_color(<<renderer, cast(float) rect.x, cast(float) rect.y, cast(float) rect.w, cast(float) rect.h, left, right, top, bottom);
+                // rect := cast(*nk_command_rect_multi_color) it;
+                // left := make_Color(nk_color_cf(rect.left));
+                // right := make_Color(nk_color_cf(rect.right));
+                // bottom := make_Color(nk_color_cf(rect.bottom));
+                // top := make_Color(nk_color_cf(rect.top));
                 
-                    break;
+                // // print("left: %\n", left);
+                // // print("right: %\n", right);
+                // // print("top: %\n", top);
+                // // print("bottom: %\n", bottom);
+                // // if bottom.r == 0 && bottom.g == 0 && bottom.b == 0 then assert(false);
+                
+                // draw_rect_multi_color(<<renderer, cast(float) rect.x, cast(float) rect.y, cast(float) rect.w, cast(float) rect.h, left, right, top, bottom);
+                
+                break;
                 case NK_COMMAND_RECT: {
                     nk_command_rect *rect = (nk_command_rect *) it;
                     u32 c = nk_color_u32(rect->color);
                     svga_draw_rect_outline(&svga_driver, rect->x, rect->y, rect->w, rect->h, c);
                 } break;
-                case NK_COMMAND_TEXT:
-                    // tex := cast(*nk_command_text) it;
-                    // color := make_Color(nk_color_cf(tex.foreground));
+                case NK_COMMAND_TEXT: {
+                    nk_command_text *text = (nk_command_text *) it;
+                    u32 color = nk_color_u32(text->foreground);
                     // font := cast(*Font) tex.font.userdata.ptr;
                     // text: string;
                     // text.count = tex.length;
                     // text.data = tex.string.data;
                     // draw_text(<<renderer, <<font, cast(float) tex.x, cast(float) tex.y + (font.char_height * 3) / 4, text, color=color);
-
-                    break;
-                case NK_COMMAND_CIRCLE_FILLED:
+                    
+                    u32 *data = reinterpret_cast<u32 *>(&image_data[0]);
+                    s32 offset = 0;
+                    for (s32 i = 0; i < text->length; ++i) {
+                        s32 start = 0, end = 0;
+                        s32 width = get_glyph_start_end(text->string[i], &start, &end);
+                        
+                        
+                        for (int line = 1; line < 8; ++line) {
+                            svga_copy_line_to_fb(&svga_driver, (u8 *)&data[start + image_width * line], width, text->x + offset, text->y + line, 0xFF000000);
+                        }
+                        offset += width;
+                    }
+                    
+                    svga_cmd_update_rect(&svga_driver, text->x, text->y, offset, 8);
+                } break;
+                case NK_COMMAND_CIRCLE_FILLED: {
                     nk_command_circle_filled *circ = (nk_command_circle_filled *) it;
                     u32 c = nk_color_u32(circ->color);
                     // assert(circ.w == circ.h);
                     // draw_circle(<<renderer, cast(float) circ.x, cast(float) circ.y, cast(float) circ.w / 2, make_Color(c));
-                    svga_draw_cirle(&svga_driver, circ->x, circ->y, circ->w / 2, c);
-
-                    break;
+                    svga_draw_circle(&svga_driver, circ->x, circ->y, circ->w / 2, c);
+                    
+                } break;
                 case NK_COMMAND_LINE:
-                    // line := cast(*nk_command_line) it;
-                    // make_Vector2 :: (v: nk_vec2i) -> Vector2 {
-                    //     return make_Vector2(cast(float) v.x, cast(float) v.y);
-                    // }
-                    // v1 := make_Vector2(line.begin);
-                    // v2 := make_Vector2(line.end);
-                    // c := nk_color_cf(line.color);
-                    // draw_line(<<renderer, v1, v2, make_Color(c), cast(float) line.line_thickness);
-
-                    break;
+                // line := cast(*nk_command_line) it;
+                // make_Vector2 :: (v: nk_vec2i) -> Vector2 {
+                //     return make_Vector2(cast(float) v.x, cast(float) v.y);
+                // }
+                // v1 := make_Vector2(line.begin);
+                // v2 := make_Vector2(line.end);
+                // c := nk_color_cf(line.color);
+                // draw_line(<<renderer, v1, v2, make_Color(c), cast(float) line.line_thickness);
+                
+                break;
                 case NK_COMMAND_SCISSOR:
-                    // sci := cast(*nk_command_scissor) it;
-                    // v := make_Viewport(sci.x, sci.y, sci.w, sci.h);
-                    // if sci.x == -8192 then
-                    //     disable_scissor();
-                    // else {
-                    //     off := v.y + cast(s32) v.h;
-                    //     if renderer.current_frame_buffer then v.y = cast(s32) renderer.current_frame_buffer.viewport.h - off;
-                    //     else v.y = cast(s32) renderer.game.window.height - off;
-
-                    //     enable_scissor(v);
-                    // }
-                    break;
+                // sci := cast(*nk_command_scissor) it;
+                // v := make_Viewport(sci.x, sci.y, sci.w, sci.h);
+                // if sci.x == -8192 then
+                //     disable_scissor();
+                // else {
+                //     off := v.y + cast(s32) v.h;
+                //     if renderer.current_frame_buffer then v.y = cast(s32) renderer.current_frame_buffer.viewport.h - off;
+                //     else v.y = cast(s32) renderer.game.window.height - off;
+                
+                //     enable_scissor(v);
+                // }
+                break;
                 default:
-                    // kprint("cmd: %\n", it->type);
+                // kprint("cmd: %\n", it->type);
                 {}
             }
         }
-
+        
         svga_update_screen(&svga_driver);
     }
 }

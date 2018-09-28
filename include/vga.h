@@ -39,6 +39,7 @@ struct Vga {
     u32 buffer_cursor_pos_x = 0;
     u32 buffer_cursor_pos_y = 0;
     void write(String s);
+    void write_float64(float64 value);
     void write_u64_hex(u64 value, bool upper);
     void write_u32_hex(u32 value, bool upper);
     void write_u32_decimal(u32 value);
