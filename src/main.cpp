@@ -823,6 +823,100 @@ void svga_cmd_update_rect(VMW_SVGA_Driver *svga, u32 x, u32 y, u32 width, u32 he
 
 struct nk_context ctx;
 
+struct Terminal_Em {
+    int current_scroll_offset_lines;
+    String text_buffer; // this is a backlog
+    String user_input; // this is the string the user is currently building
+    String user_name;
+    String machine_name;
+};
+
+struct nk_rect consume_from_top(struct nk_rect space, float amount) {
+    space.y += amount;
+    space.h -= amount;
+    return space;
+}
+
+struct nk_rect consume_from_left(struct nk_rect space, float amount) {
+    space.x += amount;
+    space.w -= amount;
+    return space;
+}
+
+void advance(String *s, s64 amount) {
+    s->data += amount;
+    s->length -= amount;
+}
+
+// @FixMe this doesnt support UTF8 but all Strings should be considered a UTF8 string
+s64 find_char(String *s, u8 needle) {
+    for (s64 i = 0; i < s->length; ++i) {
+        u8 c = s->data[i];
+        if (c == needle) return i;
+    }
+    
+    return -1;
+}
+
+void draw_terminal(struct nk_context *ctx, Terminal_Em *term) {
+    struct nk_input *input = &ctx->input;
+    struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
+    
+    struct nk_rect space;
+    enum nk_widget_layout_states state = nk_widget(&space, ctx);
+    if (!state) return;
+    
+    // if (state != NK_WIDGET_ROM) update_widget();
+    
+    // actually render the terminal contents
+    
+    struct nk_color bg = nk_rgb(0, 0, 0);
+    struct nk_color fg = nk_rgb(255, 255, 255);
+    nk_fill_rect(canvas, space, 0, nk_rgb(0, 0, 0));
+    
+    String text_buffer = term->text_buffer;
+    const nk_user_font *font = ctx->style.font;
+    
+    auto current_offset_lines = term->current_scroll_offset_lines;
+    
+    // @TODO we need to make sure that we reserve at least 1 line for the current input
+    while (text_buffer.length) {
+        s64 offset = find_char(&text_buffer, '\n');
+        if (offset == -1) {
+            nk_draw_text(canvas, space, (char *)text_buffer.data, (int)text_buffer.length, font, bg, fg);
+            
+            float width = font->width(font->userdata, font->height, (char *)text_buffer.data, (int)text_buffer.length);
+            space = consume_from_left(space, width);
+            
+            advance(&text_buffer, text_buffer.length);
+        } else {
+            if (current_offset_lines == 0) {
+                nk_draw_text(canvas, space, (char *)text_buffer.data, (int)offset, font, bg, fg);
+                space = consume_from_top(space, font->height);
+            }
+            else current_offset_lines++;
+            
+            advance(&text_buffer, offset);
+            
+            // consume the newline
+            advance(&text_buffer, 1);
+        }
+    }
+    
+    String user = term->user_name;
+    String machine = term->machine_name;
+    
+    u8 string_buf[30];
+    memcpy(string_buf, user.data, user.length);
+    string_buf[user.length] = '@';
+    memcpy(string_buf + user.length+1, machine.data, machine.length);
+    string_buf[user.length + 1 + machine.length] = ' ';
+    string_buf[user.length + 2 + machine.length] = '#';
+    
+    nk_draw_text(canvas, space, (char *)string_buf, user.length + machine.length + 3, font, bg, fg);
+    
+}
+
 void kernel_shell() {
     
     enum {EASY, HARD};
@@ -840,6 +934,11 @@ void kernel_shell() {
     
     nk_init_fixed(&ctx, heap_alloc(NK_MEM), NK_MEM, &font);
     
+    Terminal_Em term;
+    term.text_buffer = "Hello, Sailor!\n";
+    term.current_scroll_offset_lines = 0;
+    term.user_name = "josh";
+    term.machine_name = "mach-qemu";
     // for (;;) asm("hlt");
     
     while (true) {
@@ -855,28 +954,16 @@ void kernel_shell() {
         
         // continue;
         
-        if (nk_begin(&ctx, "Show", nk_rect(50, 50, 220, 220),
-                     NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_CLOSABLE)) {
-            // fixed widget pixel width
-            nk_layout_row_static(&ctx, 30, 80, 1);
-            if (nk_button_label(&ctx, "button")) {
-                // event handling
-            }
+        if (nk_begin(&ctx, "Terminal", nk_rect(50, 50, 300, 300),
+                     NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_CLOSABLE|NK_WINDOW_SCALABLE|NK_WINDOW_MINIMIZABLE|NK_WINDOW_SCROLL_AUTO_HIDE|NK_WINDOW_NO_SCROLLBAR)) {
             
-            // fixed widget window ratio width
-            nk_layout_row_dynamic(&ctx, 30, 2);
-            if (nk_option_label(&ctx, "easy", op == EASY)) op = EASY;
-            if (nk_option_label(&ctx, "hard", op == HARD)) op = HARD;
+            struct nk_rect reg = nk_window_get_content_region(&ctx);
             
-            // custom widget pixel width
-            nk_layout_row_begin(&ctx, NK_STATIC, 30, 2);
-            {
-                nk_layout_row_push(&ctx, 50);
-                nk_label(&ctx, "Volume:", NK_TEXT_LEFT);
-                nk_layout_row_push(&ctx, 110);
-                nk_slider_float(&ctx, 0, &value, 1.0f, 0.1f);
-            }
-            nk_layout_row_end(&ctx);
+            nk_layout_space_begin(&ctx, NK_STATIC, reg.h, 1);
+            reg = nk_layout_space_rect_to_local(&ctx, reg);
+            nk_layout_space_push(&ctx, reg);
+            draw_terminal(&ctx, &term);
+            nk_layout_space_end(&ctx);
         }
         nk_end(&ctx);
         
@@ -922,6 +1009,10 @@ void kernel_shell() {
                     u32 *data = reinterpret_cast<u32 *>(&image_data[0]);
                     s32 offset = 0;
                     for (s32 i = 0; i < text->length; ++i) {
+                        if (text->string[i] == ' ') {
+                            offset += 6;
+                            continue;
+                        }
                         s32 start = 0, end = 0;
                         s32 width = get_glyph_start_end(text->string[i], &start, &end);
                         

@@ -14725,7 +14725,7 @@ nk_style_from_table(struct nk_context *ctx, const struct nk_color *table)
     win->border = 2.0f;
     win->min_row_height_padding = 8;
 
-    win->padding = nk_vec2(4,4);
+    win->padding = nk_vec2(0,0);
     win->group_padding = nk_vec2(4,4);
     win->popup_padding = nk_vec2(4,4);
     win->combo_padding = nk_vec2(4,4);
@@ -15617,7 +15617,7 @@ nk_panel_begin(struct nk_context *ctx, const char *title, enum nk_panel_type pan
         layout->bounds.w -= scrollbar_size.x;
     if (!nk_panel_is_nonblock(panel_type)) {
         layout->footer_height = 0;
-        if (!(win->flags & NK_WINDOW_NO_SCROLLBAR) || win->flags & NK_WINDOW_SCALABLE)
+        if (!(win->flags & NK_WINDOW_NO_SCROLLBAR))
             layout->footer_height = scrollbar_size.y;
         layout->bounds.h -= layout->footer_height;
     }
