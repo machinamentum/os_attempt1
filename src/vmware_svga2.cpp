@@ -85,7 +85,6 @@ void svga_set_enable(VMW_SVGA_Driver *svga, u32 val) {
     svga_write_reg(svga, SVGA_REG_CONFIG_DONE, val);
     
     u32 en = svga_read_reg(svga, SVGA_REG_ENABLE);
-    kprint("EN: %u\n", en);
 }
 
 void svga_fifo_full(VMW_SVGA_Driver *svga) {

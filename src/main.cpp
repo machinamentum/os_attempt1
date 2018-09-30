@@ -360,6 +360,10 @@ void kprint(String s, ...) {
     va_end(a_list);
 }
 
+
+// @FixMe kerror needs to be fatal and we should assume that the environment is compromised; we need to forcefully drop down into the basic VGA text mode here and then print to that.
+// @FixMe kerror needs to be fatal and we should assume that the environment is compromised; we need to forcefully drop down into the basic VGA text mode here and then print to that.
+// @FixMe kerror needs to be fatal and we should assume that the environment is compromised; we need to forcefully drop down into the basic VGA text mode here and then print to that.
 void kerror(char *s, ...) {
     va_list a_list;
     va_start(a_list, s);
@@ -768,6 +772,7 @@ void kernel_main(Multiboot_Information *info) {
 
 #include "nuklear.h"
 #include "paris.c"
+#include "string.h"
 
 s32 get_glyph_start_end(u8 glyph, s32 *out_start, s32 *out_end) {
     if (glyph == ' ') {
@@ -838,7 +843,7 @@ struct nk_context ctx;
 
 struct Terminal_Em {
     int current_scroll_offset_lines;
-    String text_buffer; // this is a backlog
+    String_Builder text_buffer; // this is a backlog
     String user_input; // this is the string the user is currently building
     String user_name;
     String machine_name;
@@ -854,53 +859,6 @@ struct nk_rect consume_from_left(struct nk_rect space, float amount) {
     space.x += amount;
     space.w -= amount;
     return space;
-}
-
-void advance(String *s, s64 amount) {
-    s->data += amount;
-    s->length -= amount;
-}
-
-struct String_Builder {
-    String data;
-    s64 allocated;
-};
-
-int builder_putchar(void *payload, u8 c) {
-    String_Builder *builder = reinterpret_cast<String_Builder *>(payload);
-    
-    if (builder->data.length + 1 > builder->allocated) {
-        u8 *new_data = reinterpret_cast<u8 *>(heap_alloc(builder->allocated + 32));
-        // @TOOD check for nullptr
-        if (builder->data.data) {
-            memcpy(new_data, builder->data.data, builder->data.length);
-            heap_free(builder->data.data);
-        }
-        builder->data.data = new_data;
-    }
-    
-    builder->data.data[builder->data.length++] = c;
-    return 0; // @TODO error codes
-}
-
-String sprint(String fmt, ...) {
-    va_list a_list;
-    va_start(a_list, fmt);
-    String_Builder builder;
-    zero_memory(&builder, sizeof(String_Builder));
-    print_valist_callback(fmt, a_list, &builder, builder_putchar);
-    va_end(a_list);
-    return builder.data;
-}
-
-// @FixMe this doesnt support UTF8 but all Strings should be considered a UTF8 string
-s64 find_char(String *s, u8 needle) {
-    for (s64 i = 0; i < s->length; ++i) {
-        u8 c = s->data[i];
-        if (c == needle) return i;
-    }
-    
-    return -1;
 }
 
 void draw_terminal(struct nk_context *ctx, Terminal_Em *term) {
@@ -919,7 +877,7 @@ void draw_terminal(struct nk_context *ctx, Terminal_Em *term) {
     struct nk_color fg = nk_rgb(255, 255, 255);
     nk_fill_rect(canvas, space, 0, nk_rgb(0, 0, 0));
     
-    String text_buffer = term->text_buffer;
+    String text_buffer = term->text_buffer.data;
     const nk_user_font *font = ctx->style.font;
     
     auto current_offset_lines = term->current_scroll_offset_lines;
@@ -951,9 +909,34 @@ void draw_terminal(struct nk_context *ctx, Terminal_Em *term) {
     String user = term->user_name;
     String machine = term->machine_name;
     
-    String line = sprint("%S@%S #", user, machine);
-    nk_draw_text(canvas, space, (char *)line.data, (int)line.length, font, bg, fg);heap_free(line.data);
+    //String line = sprint("%S@%S #", user, machine);
+    //nk_draw_text(canvas, space, (char *)line.data, (int)line.length, font, bg, fg);heap_free(line.data);
 }
+
+int get_line_count(String s) {
+    int lines = 1;
+    for (s64 i = 0; i < s.length; ++i) {
+        u8 c = s.data[i];
+        if (c == '\n') lines++;
+    }
+    
+    return lines;
+}
+
+int terminal_putchar(void *payload, u8 c) {
+    Terminal_Em *term = reinterpret_cast<Terminal_Em *>(payload);
+    
+    int visible_lines = 16;
+    if (c == '\n') {
+        int num = get_line_count(term->text_buffer.data);
+        term->current_scroll_offset_lines = visible_lines - num;
+        if (term->current_scroll_offset_lines > 0) term->current_scroll_offset_lines = 0;
+    }
+    string_builder_putchar(&term->text_buffer, c);
+    return 0; // @TODO error codes
+}
+
+Terminal_Em term;
 
 void kernel_shell() {
     
@@ -972,12 +955,25 @@ void kernel_shell() {
     
     nk_init_fixed(&ctx, heap_alloc(NK_MEM), NK_MEM, &font);
     
-    Terminal_Em term;
-    term.text_buffer = "Hello, Sailor!\n";
+    zero_memory(&term, sizeof(Terminal_Em));
+    append(&term.text_buffer, "Hello, Sailor!\n");
+    //append(&term.text_buffer, "Testtesttest\n");
     term.current_scroll_offset_lines = 0;
     term.user_name = "josh";
     term.machine_name = "mach-qemu";
+    
+    // hi-jack the output stream
+    {
+        Stream *out = &streams[0];
+        out->payload = &term;
+        out->putc_cb = terminal_putchar;
+    }
+    
+    kprint("Testing kprint ! %d\n", 123456789);
+    
     // for (;;) asm("hlt");
+    
+    int counter = 20;
     
     while (true) {
         for (s64 i = 0; i < keyboard_event_queue.count; i++) {
@@ -985,10 +981,15 @@ void kernel_shell() {
             if (in.action != KEY_PRESS) continue;
             
             // @TODO send KB to WM 
-            // kprint("%c", in.utf8_code[0]);
+            kprint("%c", in.utf8_code[0]);
         }
         // @FixMe this needs a lock around it, or we need to disable keyboard IRQs
         keyboard_event_queue.clear();
+        
+        if (counter) {
+            counter--;
+            // kprint("Counter: %d\n", counter);
+        }
         
         // continue;
         
@@ -1100,7 +1101,10 @@ void kernel_shell() {
                 {}
             }
         }
+        nk_clear(&ctx);
         
         svga_update_screen(&svga_driver);
+        
+        asm("hlt");
     }
 }

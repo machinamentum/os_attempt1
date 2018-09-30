@@ -2,11 +2,6 @@
 #include "kernel.h"
 #include "interrupts.h"
 
-extern "C"
-void irq_handler(u32 irq) {
-    kerror("IRQ: %u", irq);
-}
-
 struct Idt_Descriptor {
     u16 offset_1;
     u16 selector;
@@ -37,32 +32,32 @@ Array<IRQ_Receiver> irq_Receiver_table[0x10];
 
 void register_irq_handler(s32 irq, String device_name, irq_handler_type handler,  void *dev) {
     kassert(irq >= 0 && irq < 0x10);
-
+    
     For (irq_Receiver_table[irq]) {
         if (it.dev == dev) return; // @TODO return an error code ?
     }
-
+    
     IRQ_Receiver recv;
     recv.handler = handler;
     recv.dev = dev;
-
+    
     irq_Receiver_table[irq].add(recv);
 }
 
 void detach_irq_handler(s32 irq, void *dev) {
-
+    
 }
 
 static void run_interrupt_handlers(s32 irq) {
     kassert(irq >= 0 && irq <= 0x10);
-
+    
     Array<IRQ_Receiver> *handlers = &irq_Receiver_table[irq];
-
+    
     For (*handlers) {
         irq_result_type result = it.handler(irq, it.dev);
         if (result == IRQ_RESULT_HANDLED) return;
         if (result == IRQ_RESULT_CONTINUE) continue;
-
+        
         // @TODO what should we do if the driver returns other codes?
     }
 }
@@ -76,43 +71,43 @@ void __irq_0x00_handler(void *arg) {
 __attribute__((interrupt))
 void __irq_0x01_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x02_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x03_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x04_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x05_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x06_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x07_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
@@ -124,7 +119,7 @@ void __irq_0x08_handler(void *arg, u32 error_code) {
 __attribute__((interrupt))
 void __irq_0x09_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
@@ -165,7 +160,7 @@ void __irq_0x0F_handler(void *arg) {
 __attribute__((interrupt))
 void __irq_0x10_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
@@ -177,73 +172,73 @@ void __irq_0x11_handler(void *arg, u32 error_code) {
 __attribute__((interrupt))
 void __irq_0x12_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x13_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x14_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x15_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x16_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x17_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x18_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x19_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x1A_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x1B_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x1C_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x1D_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
@@ -255,7 +250,7 @@ void __irq_0x1E_handler(void *arg, u32 error_code) {
 __attribute__((interrupt))
 void __irq_0x1F_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
@@ -412,22 +407,22 @@ u8 get_ascii_representable_character(u32 keycode, bool shift_pressed) {
         if (keycode >= KEYCODE_A && keycode <= KEYCODE_Z) {
             if (!shift_pressed) return static_cast<u8>(keycode + 0x20);
         }
-
+        
         if (keycode >= KEYCODE_0 && keycode <= KEYCODE_9) {
             u8 value = static_cast<u8>(keycode - KEYCODE_0);
             if (shift_pressed) return ")!@#$%^&*("[value];
         }
-
+        
         return static_cast<u8>(keycode);
     }
-
+    
     if (keycode >= KEYCODE_NUMPAD_0 && keycode <= KEYCODE_NUMPAD_9) {
         u8 value = static_cast<u8>(keycode - KEYCODE_NUMPAD_0);
         return KEYCODE_0 + value;
     }
-
+    
     if (keycode == KEYCODE_ENTER) return '\n';
-
+    
     return ASCII_EXTENDED_BLOCK;
 }
 
@@ -435,10 +430,10 @@ __attribute__((interrupt))
 void __irq_0x21_handler(void *arg) {
     UNUSED(arg);
     run_interrupt_handlers(1);
-
+    
     if (_port_io_read_u8(PS2_STATUS) & PS2_STATUS_OUTPUT_BUFFER_BIT) {
         u8 scancode = _port_io_read_u8(PS2_DATA); _io_wait();
-
+        
         u8 action = KEY_PRESS;
         if (scancode == 0xF0) {
             action = KEY_RELEASE;
@@ -447,13 +442,14 @@ void __irq_0x21_handler(void *arg) {
         } else if (scancode == 0xE0) {
             kassert(false);
         }
-
+        
         u8 temp = _port_io_read_u8(0x61);
         _port_io_write_u8(0x61, temp | 0x80); _io_wait();
         _port_io_write_u8(0x61, temp); _io_wait();
-
-        if (scancode >= 0x84) kprint("SCANCODE: %X\n", scancode);
-        else {
+        
+        if (scancode >= 0x84) {
+            // kprint("SCANCODE: %X\n", scancode);
+        } else {
             u32 keycode = scancode_set2_table[scancode];
             if (keycode == KEYCODE_LEFT_CONTROL || keycode == KEYCODE_RIGHT_CONTROL) {
                 _ctrl_pressed = action;
@@ -470,13 +466,13 @@ void __irq_0x21_handler(void *arg) {
                     i.action = action;
                     i.keycode = keycode;
                     i.utf8_code[0] = ascii; // @Hack @FixMe
-
+                    
                     keyboard_event_queue.add(i);
                 }
             }
         }
     }
-
+    
     pic_set_eoi(0x21);
 }
 
@@ -567,7 +563,7 @@ void __irq_0x2D_handler(void *arg) {
 __attribute__((interrupt))
 void __irq_0x2E_handler(void *arg) {
     UNUSED(arg);
-    kprint("IDE IRQ 14\n");
+    // kprint("IDE IRQ 14\n");
     run_interrupt_handlers(14);
     pic_set_eoi(0x2E);
 }
@@ -587,1243 +583,1243 @@ void __irq_0x30_handler(void *arg) {
 __attribute__((interrupt))
 void __irq_0x31_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x32_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x33_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x34_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x35_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x36_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x37_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x38_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x39_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x3A_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x3B_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x3C_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x3D_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x3E_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x3F_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x40_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x41_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x42_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x43_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x44_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x45_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x46_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x47_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x48_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x49_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x4A_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x4B_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x4C_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x4D_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x4E_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x4F_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x50_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x51_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x52_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x53_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x54_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x55_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x56_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x57_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x58_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x59_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x5A_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x5B_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x5C_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x5D_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x5E_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x5F_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x60_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x61_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x62_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x63_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x64_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x65_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x66_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x67_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x68_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x69_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x6A_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x6B_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x6C_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x6D_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x6E_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x6F_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x70_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x71_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x72_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x73_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x74_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x75_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x76_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x77_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x78_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x79_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x7A_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x7B_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x7C_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x7D_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x7E_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x7F_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x80_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x81_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x82_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x83_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x84_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x85_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x86_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x87_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x88_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x89_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x8A_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x8B_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x8C_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x8D_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x8E_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x8F_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x90_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x91_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x92_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x93_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x94_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x95_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x96_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x97_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x98_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x99_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x9A_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x9B_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x9C_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x9D_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x9E_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0x9F_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xA0_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xA1_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xA2_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xA3_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xA4_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xA5_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xA6_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xA7_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xA8_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xA9_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xAA_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xAB_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xAC_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xAD_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xAE_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xAF_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xB0_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xB1_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xB2_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xB3_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xB4_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xB5_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xB6_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xB7_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xB8_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xB9_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xBA_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xBB_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xBC_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xBD_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xBE_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xBF_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xC0_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xC1_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xC2_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xC3_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xC4_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xC5_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xC6_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xC7_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xC8_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xC9_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xCA_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xCB_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xCC_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xCD_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xCE_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xCF_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xD0_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xD1_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xD2_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xD3_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xD4_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xD5_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xD6_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xD7_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xD8_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xD9_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xDA_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xDB_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xDC_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xDD_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xDE_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xDF_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xE0_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xE1_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xE2_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xE3_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xE4_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xE5_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xE6_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xE7_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xE8_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xE9_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xEA_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xEB_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xEC_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xED_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xEE_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xEF_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xF0_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xF1_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xF2_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xF3_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xF4_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xF5_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xF6_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xF7_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xF8_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xF9_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xFA_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xFB_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xFC_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xFD_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xFE_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 __attribute__((interrupt))
 void __irq_0xFF_handler(void *arg) {
     UNUSED(arg);
-
+    
 }
 
 void init_interrupt_descriptor_table() {
@@ -2083,6 +2079,6 @@ void init_interrupt_descriptor_table() {
     set_idt_entry(&idt_table[0xFD], (u32)&__irq_0xFD_handler, INTERRUPT_PRESENT | INTERRUPT_TYPE_GATE_32, 0);
     set_idt_entry(&idt_table[0xFE], (u32)&__irq_0xFE_handler, INTERRUPT_PRESENT | INTERRUPT_TYPE_GATE_32, 0);
     set_idt_entry(&idt_table[0xFF], (u32)&__irq_0xFF_handler, INTERRUPT_PRESENT | INTERRUPT_TYPE_GATE_32, 0);
-
+    
     set_idt(&idt_table, sizeof(idt_table[0]) * 256);
 }

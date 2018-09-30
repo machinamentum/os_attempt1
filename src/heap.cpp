@@ -38,14 +38,14 @@ void init_heap() {
 }
 
 void *heap_map(u32 size) {
-    kprint("Size: %d\n", size);
+    // kprint("Size: %d\n", size);
     kassert((size & (PAGE_SIZE-1)) == 0);
     kassert((heap_info.mappable_addr_space - heap_info.mapped_memory) >= size);
     
     u32 page_start = HEAP_VIRTUAL_BASE_ADDRESS + heap_info.mapped_memory;
     for (u32 i = 0; i <= size; i += PAGE_SIZE) {
         u32 page = next_free_page();
-        kprint("GOT PAGE: %X\n", page);
+        // kprint("GOT PAGE: %X\n", page);
         map_page(page, HEAP_VIRTUAL_BASE_ADDRESS + heap_info.mapped_memory, PAGE_READ_WRITE);
         heap_info.mapped_memory += PAGE_SIZE;
     }
@@ -80,12 +80,13 @@ void *_heap_alloc(u32 size) {
         allocation_size &= ~7;
         allocation_size += 8;
     }
-    heap_reserve(size);
+    if (heap_info.watermark + allocation_size >= heap_info.mapped_memory) 
+        heap_reserve(size);
     
     void *out = reinterpret_cast<void *>(HEAP_VIRTUAL_BASE_ADDRESS + heap_info.watermark);
     heap_info.watermark += allocation_size;
     kassert(heap_info.watermark < heap_info.mapped_memory);
-    kprint("heap: Allocated block at %p of size %d\n", out, allocation_size);
+    // kprint("heap: Allocated block at %p of size %d\n", out, allocation_size);
     return out;
 }
 
