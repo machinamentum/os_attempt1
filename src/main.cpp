@@ -5,6 +5,7 @@
 #include "heap.h"
 #include "keyboard.h"
 #include "pci.h"
+#include "print.h"
 
 struct Multiboot_Mmap {
     u32 size;
@@ -333,22 +334,30 @@ u32 *init_page_table_directory() {
 
 Vga vga;
 
+struct Stream {
+    void *payload;
+    putchar_callback putc_cb;
+};
+
+Stream streams[1];
+
+void kprint_valist(String s, va_list a_list) {
+    Stream *st = &streams[0];
+    print_valist_callback(s, a_list, st->payload, st->putc_cb);
+}
+
 void kprint(char *s, ...) {
     va_list a_list;
     va_start(a_list, s);
-    vga.print_valist(temp_string(s), a_list);
+    kprint_valist(temp_string(s), a_list);
     va_end(a_list);
 }
 
 void kprint(String s, ...) {
     va_list a_list;
     va_start(a_list, s);
-    vga.print_valist(s, a_list);
+    kprint_valist(s, a_list);
     va_end(a_list);
-}
-
-void kprint_valist(String s, va_list a_list) {
-    vga.print_valist(s, a_list);
 }
 
 void kerror(char *s, ...) {
@@ -691,6 +700,10 @@ void kernel_main(Multiboot_Information *info) {
     upper_memory_size_pages = info->mem_upper / 4; // convert KB to pages (4096 byte blocks)
     vga = Vga();
     
+    Stream *output = &streams[0];
+    output->payload = &vga;
+    output->putc_cb = vga_putchar;
+    
     vga.enable_cursor(true);
     vga.clear_screen();
     kprint("Hello, Sailor!\n");
@@ -848,6 +861,38 @@ void advance(String *s, s64 amount) {
     s->length -= amount;
 }
 
+struct String_Builder {
+    String data;
+    s64 allocated;
+};
+
+int builder_putchar(void *payload, u8 c) {
+    String_Builder *builder = reinterpret_cast<String_Builder *>(payload);
+    
+    if (builder->data.length + 1 > builder->allocated) {
+        u8 *new_data = reinterpret_cast<u8 *>(heap_alloc(builder->allocated + 32));
+        // @TOOD check for nullptr
+        if (builder->data.data) {
+            memcpy(new_data, builder->data.data, builder->data.length);
+            heap_free(builder->data.data);
+        }
+        builder->data.data = new_data;
+    }
+    
+    builder->data.data[builder->data.length++] = c;
+    return 0; // @TODO error codes
+}
+
+String sprint(String fmt, ...) {
+    va_list a_list;
+    va_start(a_list, fmt);
+    String_Builder builder;
+    zero_memory(&builder, sizeof(String_Builder));
+    print_valist_callback(fmt, a_list, &builder, builder_putchar);
+    va_end(a_list);
+    return builder.data;
+}
+
 // @FixMe this doesnt support UTF8 but all Strings should be considered a UTF8 string
 s64 find_char(String *s, u8 needle) {
     for (s64 i = 0; i < s->length; ++i) {
@@ -906,15 +951,8 @@ void draw_terminal(struct nk_context *ctx, Terminal_Em *term) {
     String user = term->user_name;
     String machine = term->machine_name;
     
-    u8 string_buf[30];
-    memcpy(string_buf, user.data, user.length);
-    string_buf[user.length] = '@';
-    memcpy(string_buf + user.length+1, machine.data, machine.length);
-    string_buf[user.length + 1 + machine.length] = ' ';
-    string_buf[user.length + 2 + machine.length] = '#';
-    
-    nk_draw_text(canvas, space, (char *)string_buf, user.length + machine.length + 3, font, bg, fg);
-    
+    String line = sprint("%S@%S #", user, machine);
+    nk_draw_text(canvas, space, (char *)line.data, (int)line.length, font, bg, fg);heap_free(line.data);
 }
 
 void kernel_shell() {

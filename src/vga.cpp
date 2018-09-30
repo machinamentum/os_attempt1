@@ -24,163 +24,6 @@ void Vga::scroll_one_line() {
     buffer_cursor_pos_y--;
 }
 
-void Vga::print_valist(String fmt, va_list a_list) {
-    for (s64 i = 0; i < fmt.length; ++i) {
-        u8 c = fmt.data[i];
-        
-        if (c == '%') {
-            if (i < fmt.length-1) {
-                ++i;
-                c = fmt.data[i];
-                
-                int size = 4;
-                // if (c == 'l') {
-                //     size = 8;
-                
-                //     if (i < fmt.length-1) {
-                //         ++i;
-                //         c = fmt.data[i];
-                //     }
-                // }
-                
-                if (c == 'u') {
-                    if (size == 4) write_u32_decimal(va_arg(a_list, u32));
-                    // else if (size == 8) write_u64_decimal(va_arg(a_list, u64));
-                } else if (c == 'd') {
-                    if (size == 4) write_s32_decimal(va_arg(a_list, s32));
-                    // else if (size == 8) write_s64_decimal(va_arg(a_list, s64));
-                } else if (c == 'S') {
-                    String as = va_arg(a_list, String);
-                    print(as);
-                } else if (c == 's') {
-                    char *as = va_arg(a_list, char *);
-                    print(temp_string(as));
-                } else if (c == 'X') {
-                    write_u32_hex(va_arg(a_list, u32), true);
-                } else if (c == 'x') {
-                    write_u32_hex(va_arg(a_list, u32), false);
-                } else if (c == 'p') {
-                    void *value = va_arg(a_list, void *);
-                    
-                    write('0');
-                    write('x');
-                    if (sizeof(void *) == sizeof(u32)) {
-                        write_u32_hex(reinterpret_cast<u32>(value), true);
-                    } else if (sizeof(void *) == sizeof(u64)) {
-                        write_u64_hex(reinterpret_cast<u64>(value), true);
-                    }
-                } else if (c == 'c') {
-                    u32 value = va_arg(a_list, u32);
-                    write(static_cast<u8>(value));
-                } else if (c == 'f') {
-                    float64 value = va_arg(a_list, float64);
-                    write_float64(value);
-                } else {
-                    // @TODO
-                    write(c);
-                }
-            } else {
-                write(c);
-            }
-        } else {
-            write(c);
-        }
-    }
-}
-
-void Vga::print(String fmt, ...) {
-    va_list a_list;
-    va_start(a_list, fmt);
-    print_valist(fmt, a_list);
-    va_end(a_list);
-}
-
-void Vga::write_float64(float64 value) {
-    u64 x;
-    
-    // this is totally garbage, in order to avoid strict-aliasing
-    // rules here, we have to memcpy in stead of a reinterpret_cast, sigh
-    kassert(sizeof(x) == sizeof(value));
-    memcpy(&x, &value, sizeof(value));
-    
-    // @Incomplete
-    /*
-    u8 exp = (x >> 23) & 0xFF;
-    u32 sig = (x) & 0x7FFFFF;
-    
-    if (x & 0x80000000) {
-        write('-');
-    }
-    
-    if (exp == 0xFF) {
-        if (sig == 0) {
-            write("(inf)");
-        } else {
-            write("(Nan)");
-        }
-    } else if (exp == 0x00) {
-        if (sig == 0) {
-            write("0.000000");
-        } else {
-            // @TODO maybe represent denormalized numbers in some way?
-            write("0.000000");
-        }
-    } else {
-        s8 exp_v = exp - 127;
-        
-        if (exp_v < 0) {
-            write('0');
-            write('.');
-            while (exp_v % 8) {
-            
-            }
-        }
-    }
-*/
-}
-
-void Vga::write_u64_hex(u64 value, bool upper) {
-    write_u32_hex((value >> 32) & 0xFFFFFFFF, upper);
-    write_u32_hex(value & 0xFFFFFFFF, upper);
-}
-
-void Vga::write_u32_hex(u32 value, bool upper) {
-    char *hex_values;
-    if (upper) hex_values = "0123456789ABCDEF";
-    else hex_values       = "0123456789abcdef";
-    
-    for (int i = 0; i < 8; ++i) {
-        u32 v = (value >> ((7 - i)*4)) & 0xF;
-        write(hex_values[v]);
-    }
-}
-
-void Vga::write_u32_decimal(u32 value) {
-    char *dec_values = "0123456789";
-    char buffer[11];
-    zero_memory(&buffer, sizeof(buffer));
-    u8 index = 0;
-    
-    do {
-        buffer[index++] = dec_values[value % 10];
-        value /= 10;
-    } while (value > 0);
-    
-    for (int i = 10; i >= 0; --i) {
-        char c = buffer[i];
-        if (c == 0) continue;
-        write(c);
-    }
-}
-
-void Vga::write_s32_decimal(s32 value) {
-    if (value < 0) {
-        write('-');
-        value = -value;
-    }
-    write_u32_decimal(value);
-}
-
 void Vga::write(u8 c) {
     if (c == '\n') {
         buffer_cursor_pos_x = 0;
@@ -208,6 +51,14 @@ void Vga::write(u8 c) {
     }
     
     set_cursor_coordinates(buffer_cursor_pos_x, buffer_cursor_pos_y);
+}
+
+
+// @TODO error codes
+int vga_putchar(void *payload, u8 c) {
+    Vga *vga = reinterpret_cast<Vga *>(payload);
+    vga->write(c);
+    return 0;
 }
 
 void Vga::write(String s) {
