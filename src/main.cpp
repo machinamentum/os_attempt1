@@ -208,14 +208,15 @@ void page_allocator_init() {
     // }
 }
 
-extern "C"
-void load_page_directory(u32 page_directory);
-extern "C"
-void enable_paging();
-extern "C"
-void flush_tlb();
-extern "C"
-void invalidate_page_i486(u32 page);
+extern "C" {
+    void load_page_directory(u32 page_directory);
+    
+    void enable_paging();
+    
+    void flush_tlb();
+    
+    void invalidate_page_i486(u32 page);
+}
 
 void invalidate_page(u32 page) {
     // @TODO maybe, invlpg instruction exists in i486 and newer, but we probably don't care to support anything thats several decades old!
