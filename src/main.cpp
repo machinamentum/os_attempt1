@@ -939,11 +939,6 @@ int terminal_putchar(void *payload, u8 c) {
 Terminal_Em term;
 
 void kernel_shell() {
-    
-    enum {EASY, HARD};
-    static int op = EASY;
-    static float value = 0.6f;
-    // static int i =  20;
     struct nk_user_font font;
     
     font.userdata.ptr = nullptr;
@@ -1108,3 +1103,15 @@ void kernel_shell() {
         asm("hlt");
     }
 }
+
+
+
+#define STRING_IMPLEMENTATION
+#include "string.h"
+
+#define PRINT_IMPLEMENTATION
+#include "print.h"
+
+#define NK_IMPLEMENTATION
+#define NK_ASSERT kassert
+#include "nuklear.h"

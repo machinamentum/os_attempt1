@@ -16,19 +16,7 @@
 
 #define kNEW(type) (reinterpret_cast<type *>( zero_memory(heap_alloc(sizeof(type)), sizeof(type)) ))
 
-struct String;
-
-String temp_string(char *c_string);
-
-struct String {
-    u8 *data;
-    s64 length;
-
-    String(){}
-    String(char *str) {
-        *this = temp_string(str);
-    }
-};
+#include "string.h"
 
 void _kassert(bool arg, String s, String file, u32 line);
 
@@ -90,20 +78,20 @@ struct Array {
     s64 count = 0;
     s64 allocated = 0;
     allocator_type allocator = heap_allocator;
-
+    
     T &operator [](s64 index) {
         kassert(index >= 0 && index < count);
         return data[index];
     }
-
+    
     void reserve(s64 size) {
         kassert(allocator);
-
+        
         if (size > allocated) {
         	if (size < 32) size = 32;
-
+            
             kassert(allocator == heap_allocator);
-
+            
             T *ndata;
             ndata = reinterpret_cast<T *>(allocator(ALLOCATOR_MODE_ALLOC, nullptr, size * sizeof(T)));
             memcpy(ndata, data, count * sizeof(T));
@@ -112,27 +100,27 @@ struct Array {
             allocated = size;
         }
     }
-
+    
     void resize(s64 size) {
         reserve(size);
-
+        
         count = size;
     }
-
+    
     void add(T item) {
     	resize(count+1);
     	data[count-1] = item;
     }
-
+    
     void clear() {
     	count = 0;
     }
-
+    
     T *begin() {
         if (count) return &data[0];
         return nullptr;
     }
-
+    
     T *end() {
         if (count) return &data[count];
         return nullptr;
