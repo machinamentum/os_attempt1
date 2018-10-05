@@ -45,6 +45,9 @@ void *heap_map(u32 size) {
     u32 page_start = HEAP_VIRTUAL_BASE_ADDRESS + heap_info.mapped_memory;
     for (u32 i = 0; i <= size; i += PAGE_SIZE) {
         u32 page = next_free_page();
+        // @TODO check if the page is even valid for use
+        // then return null if not
+        
         // kprint("GOT PAGE: %X\n", page);
         map_page(page, HEAP_VIRTUAL_BASE_ADDRESS + heap_info.mapped_memory, PAGE_READ_WRITE);
         heap_info.mapped_memory += PAGE_SIZE;

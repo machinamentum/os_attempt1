@@ -15,7 +15,11 @@ extern "C" {
     float tanf(float x);
     double tan(double x);
     
-#define M_PI 3.14159265359
+    float fabsf(float x);
+    double fabs(double x);
+    
+    
+#define M_PI 3.14159265358979323846264338327950288
     
 #ifdef __cplusplus
 }

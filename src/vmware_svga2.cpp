@@ -215,11 +215,11 @@ void svga_draw_rect(VMW_SVGA_Driver *svga, s32 x, s32 y, s32 width, s32 height, 
 }
 
 void svga_draw_circle(VMW_SVGA_Driver *svga, s32 x, s32 y, s32 radius, u32 color) {
-    u32 screen_width = svga_read_reg(svga, SVGA_REG_WIDTH);
-    u32 screen_height = svga_read_reg(svga, SVGA_REG_HEIGHT);
+    s32 screen_width = static_cast<s32>(svga_read_reg(svga, SVGA_REG_WIDTH));
+    s32 screen_height = static_cast<s32>(svga_read_reg(svga, SVGA_REG_HEIGHT));
     
-    s32 y0 = y - radius;
-    s32 y1 = y + radius;
+    s32 y0 = y;
+    s32 y1 = y + radius*2;
     
     s32 start_y = y0;
     s32 end_y = y1;
@@ -228,12 +228,21 @@ void svga_draw_circle(VMW_SVGA_Driver *svga, s32 x, s32 y, s32 radius, u32 color
     
     u32 offset = svga_read_reg(svga, SVGA_REG_FB_OFFSET);
     u32 *vram = reinterpret_cast<u32 *>(DRIVER_SAFE_USERLAND_VIRTUAL_ADDRESS + offset);
-    for (start_y; start_y < end_y; ++start_y) {
-        float32 inter = static_cast<float32>(start_y) / static_cast<float32>(y1);
-        inter = (inter * M_PI) - (M_PI / 2.0);
-        float32 xf = sin(-inter) * static_cast<float32>(radius);
-        s32 x0 = static_cast<s32>(xf);
-        s32 x1 = static_cast<s32>(-xf);
+    kprint("Start:\n");
+    int count = 01;
+    for (; start_y <= end_y; ++start_y) {
+        float64 inter = static_cast<float64>(start_y - y0) / static_cast<float64>(radius * 2);
+        inter = (inter * M_PI) + (M_PI / 2.0);
+        float64 xf = (cos(inter)) * static_cast<float64>(radius);
+        kprint("xf(%d) ", (s32)xf);
+        s32 x0 = static_cast<s32>(xf + x);
+        s32 x1 = static_cast<s32>(-xf + x);
+        // kprint("[%d, %d] ", x0, x1);
+        if (count == 4) {
+            kprint("\n");
+            count = 1;
+        }
+        count ++;
         
         if (x0 < 0) x0 = 0;
         if (x1 > screen_width) x1 = screen_width;
@@ -242,8 +251,10 @@ void svga_draw_circle(VMW_SVGA_Driver *svga, s32 x, s32 y, s32 radius, u32 color
             vram[x0 + start_y * screen_width] = color;
         }
     }
+    kprint("END\n");
     
     svga_cmd_update_rect(svga, x - radius, y0, radius, radius);
+    // for(;;) asm("hlt");
 }
 
 void svga_copy_line_to_fb(VMW_SVGA_Driver *svga, u8 *buffer, s32 width_in_pixels, s32 x, s32 y, u32 filter_color) {
