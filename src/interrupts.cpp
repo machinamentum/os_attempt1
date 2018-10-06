@@ -406,12 +406,18 @@ u8 get_ascii_representable_character(u32 keycode, bool shift_pressed) {
     if (keycode >= 0x20 && keycode < 0x7F) {
         if (keycode >= KEYCODE_A && keycode <= KEYCODE_Z) {
             if (!shift_pressed) return static_cast<u8>(keycode + 0x20);
+        } else if (keycode >= KEYCODE_COMMA && keycode <= KEYCODE_9) {
+            u8 value = static_cast<u8>(keycode - KEYCODE_COMMA);
+            if (shift_pressed) return "<_>?)!@#$%^&*("[value];
+        } else if (keycode >= KEYCODE_LEFT_BRACKET && keycode <= KEYCODE_RIGHT_BRACKET) {
+            u8 value = static_cast<u8>(keycode - KEYCODE_LEFT_BRACKET);
+            if (shift_pressed) return "{|}"[value];
         }
         
-        if (keycode >= KEYCODE_0 && keycode <= KEYCODE_9) {
-            u8 value = static_cast<u8>(keycode - KEYCODE_0);
-            if (shift_pressed) return ")!@#$%^&*("[value];
-        }
+        else if (keycode == KEYCODE_SEMICOLON && shift_pressed) return ':';
+        else if (keycode == KEYCODE_SINGLE_QUOTE && shift_pressed) return '\"';
+        else if (keycode == KEYCODE_EQUALS && shift_pressed) return '+';
+        
         
         return static_cast<u8>(keycode);
     }

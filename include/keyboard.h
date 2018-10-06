@@ -7,9 +7,9 @@ struct Input {
 	u8 ctrl_pressed;
 	u8 shift_pressed;
 	u8 action;
-
+    
 	u32 keycode;
-
+    
 	u8 utf8_code[4];
 };
 
@@ -23,6 +23,8 @@ extern Array<Input> keyboard_event_queue;
 
 #define KEYCODE_ESCAPE   27
 
+// The basic representable ASCII characters are 1:1 mapped with keycodes
+// however, it is advised to use utf8_code instead of keycode for printing
 #define KEYCODE_SPACE    ' '
 
 #define KEYCODE_SINGLE_QUOTE 39
@@ -30,7 +32,6 @@ extern Array<Input> keyboard_event_queue;
 #define KEYCODE_COMMA    ','
 #define KEYCODE_MINUS    '-'
 #define KEYCODE_PERIOD   '.'
-#define KEYCODE_EQUALS   '='
 #define KEYCODE_FORWARD_SLASH '/'
 #define KEYCODE_0        '0'
 #define KEYCODE_1        '1'
@@ -44,6 +45,8 @@ extern Array<Input> keyboard_event_queue;
 #define KEYCODE_9        '9'
 
 #define KEYCODE_SEMICOLON ';'
+
+#define KEYCODE_EQUALS   '='
 
 #define KEYCODE_A        'A'
 #define KEYCODE_B        'B'

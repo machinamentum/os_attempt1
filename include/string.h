@@ -32,6 +32,8 @@ String sprint(String fmt, ...);
 
 s64 find_char(String *s, u8 needle);
 
+bool strings_match(String a, String b);
+
 #endif
 
 #ifdef STRING_IMPLEMENTATION
@@ -91,6 +93,20 @@ int append(String_Builder *builder, String s) {
     }
     
     return 0;
+}
+
+bool strings_match(String a, String b) {
+    if ((a.data == b.data) && (a.length == b.length)) return true;
+    
+    if (!a.data || !b.data) return  false; // the case where the length matches is caught above
+    
+    if (a.length != b.length) return false;
+    
+    for (s64 i = 0; i < a.length; ++i) {
+        if (a.data[i] != b.data[i]) return false;
+    }
+    
+    return true;
 }
 
 #endif // STRING_IMPLEMENTATION

@@ -845,7 +845,7 @@ struct nk_context ctx;
 struct Terminal_Em {
     int current_scroll_offset_lines;
     String_Builder text_buffer; // this is a backlog
-    String user_input; // this is the string the user is currently building
+    String_Builder user_input; // this is the string the user is currently building
     String user_name;
     String machine_name;
 };
@@ -862,6 +862,14 @@ struct nk_rect consume_from_left(struct nk_rect space, float amount) {
     return space;
 }
 
+void command_pci_info() {
+    For (pci_devices) {
+        print_pci_header(&it);
+    }
+}
+
+#define COMMAND(cmd_str, name) do { if(strings_match(cmd_str, #name)) command_ ## name(); } while(0)
+
 void draw_terminal(struct nk_context *ctx, Terminal_Em *term) {
     struct nk_input *input = &ctx->input;
     struct nk_command_buffer *canvas = nk_window_get_canvas(ctx);
@@ -870,7 +878,31 @@ void draw_terminal(struct nk_context *ctx, Terminal_Em *term) {
     enum nk_widget_layout_states state = nk_widget(&space, ctx);
     if (!state) return;
     
-    // if (state != NK_WIDGET_ROM) update_widget();
+    if (true) {
+        for (s64 i = 0; i < keyboard_event_queue.count; i++) {
+            Input in = keyboard_event_queue[i];
+            if (in.action != KEY_PRESS) continue;
+            
+            if (in.keycode >= KEYCODE_SPACE && in.keycode < KEYCODE_BACKSPACE) {
+                string_builder_putchar(&term->user_input, in.utf8_code[0]);
+            } else if (in.keycode == KEYCODE_BACKSPACE) {
+                if (term->user_input.data.length > 0) term->user_input.data.length--;
+            } else if (in.keycode == KEYCODE_ENTER) {
+                kprint(term->user_input.data);
+                kprint("\n");
+                
+                // if (strings_match(term->user_input.data, "pci_info")) {}
+                COMMAND(term->user_input.data, pci_info);
+                
+                term->user_input.data.length = 0;
+                
+                kprint(term->user_name);
+                kprint("@");
+                kprint(term->machine_name);
+                kprint("> ");
+            }
+        }
+    }
     
     // actually render the terminal contents
     
@@ -909,9 +941,14 @@ void draw_terminal(struct nk_context *ctx, Terminal_Em *term) {
     
     String user = term->user_name;
     String machine = term->machine_name;
+    String user_input = term->user_input.data;
+    nk_draw_text(canvas, space, (char *)user_input.data, (int)user_input.length, font, bg, fg);
     
-    //String line = sprint("%S@%S #", user, machine);
-    //nk_draw_text(canvas, space, (char *)line.data, (int)line.length, font, bg, fg);heap_free(line.data);
+    /*
+    String line = sprint("%S@%S # %S", user, machine, user_input);
+    nk_draw_text(canvas, space, (char *)line.data, (int)line.length, font, bg, fg);
+    heap_free(line.data);
+    */
 }
 
 int get_line_count(String s) {
@@ -927,7 +964,7 @@ int get_line_count(String s) {
 int terminal_putchar(void *payload, u8 c) {
     Terminal_Em *term = reinterpret_cast<Terminal_Em *>(payload);
     
-    int visible_lines = 40;
+    int visible_lines = 34;
     if (c == '\n') {
         int num = get_line_count(term->text_buffer.data);
         term->current_scroll_offset_lines = visible_lines - num;
@@ -948,7 +985,7 @@ void kernel_shell() {
     struct nk_user_font font;
     
     font.userdata.ptr = nullptr;
-    font.height = 14;
+    font.height = 16;
     font.width = nuklear_font_width;
     
 #define NK_MEM (PAGE_SIZE * 64)
@@ -970,32 +1007,62 @@ void kernel_shell() {
         out->putc_cb = terminal_putchar;
     }
     
-    kprint("Testing kprint ! %d\n", 123456789);
+    //kprint("Testing kprint ! %d\n", 123456789);
     
     // for (;;) asm("hlt");
     
     int counter = 20;
     
     while (true) {
+        nk_input_begin(&ctx);
+        asm("cli"); // @TODO IRQ synchronization primitive
         for (s64 i = 0; i < keyboard_event_queue.count; i++) {
             Input in = keyboard_event_queue[i];
-            if (in.action != KEY_PRESS) continue;
             
+            int state = (in.action == KEY_RELEASE) ? 0 : 1;
+            switch (in.keycode) {
+                case KEYCODE_LEFT_SHIFT:
+                case KEYCODE_RIGHT_SHIFT:
+                nk_input_key(&ctx, NK_KEY_SHIFT, state);
+                break;
+                
+                case KEYCODE_LEFT_CONTROL:
+                case KEYCODE_RIGHT_CONTROL:
+                nk_input_key(&ctx, NK_KEY_CTRL,  state);
+                break;
+                
+                // case nk_input_key(&ctx, NK_KEY_DEL,   state); break;
+                
+                case KEYCODE_ENTER:
+                nk_input_key(&ctx, NK_KEY_ENTER, state);
+                break;
+                
+                case KEYCODE_TAB:
+                nk_input_key(&ctx, NK_KEY_TAB,   state);
+                break;
+                
+                case KEYCODE_BACKSPACE:
+                nk_input_key(&ctx, NK_KEY_BACKSPACE, state);
+                break;
+                
+                default:
+                if (in.action == KEY_PRESS) nk_input_char(&ctx, in.utf8_code[0]/*hack*/);
+                break;
+                
+                /*
+                case nk_input_key(&ctx, NK_KEY_UP,    state); break;
+                case nk_input_key(&ctx, NK_KEY_DOWN,  state); break;
+                case nk_input_key(&ctx, NK_KEY_LEFT,  state); break;
+                case nk_input_key(&ctx, NK_KEY_RIGHT, state); break;
+                */
+            }
             // @TODO send KB to WM 
-            kprint("%c", in.utf8_code[0]);
+            // kprint("%c", in.utf8_code[0]);
         }
-        // @FixMe this needs a lock around it, or we need to disable keyboard IRQs
-        keyboard_event_queue.clear();
+        nk_input_end(&ctx);
         
-        if (counter) {
-            counter--;
-            // kprint("Counter: %d\n", counter);
-        }
-        
-        // continue;
-        
-        if (nk_begin(&ctx, "Terminal", nk_rect(50, 50, 300, 300),
-                     NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_CLOSABLE|NK_WINDOW_SCALABLE|NK_WINDOW_MINIMIZABLE|NK_WINDOW_SCROLL_AUTO_HIDE|NK_WINDOW_NO_SCROLLBAR)) {
+        if (nk_begin_titled(&ctx, "_Terminal", "Terminal", nk_rect(50, 50, 500, 600),
+                            NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_CLOSABLE|NK_WINDOW_SCALABLE|NK_WINDOW_MINIMIZABLE|NK_WINDOW_SCROLL_AUTO_HIDE|NK_WINDOW_NO_SCROLLBAR)) {
             
             struct nk_rect reg = nk_window_get_content_region(&ctx);
             
@@ -1007,7 +1074,7 @@ void kernel_shell() {
         }
         nk_end(&ctx);
         
-        if (nk_begin(&ctx, "Show", nk_rect(400, 50, 220, 220),
+        if (nk_begin(&ctx, "Show", nk_rect(700, 50, 220, 220),
                      NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_CLOSABLE)) {
             // fixed widget pixel width
             nk_layout_row_static(&ctx, 30, 80, 1);
@@ -1030,6 +1097,12 @@ void kernel_shell() {
         }
         nk_end(&ctx);
         
+        // enable interrupts and clear the keyboard state at the end of the GUI update so we can
+        // read from the input queue during GUI updates
+        // @FixMe this needs a lock around it, or we need to disable keyboard IRQs
+        asm("sti");
+        keyboard_event_queue.clear();
+        
         svga_clear_screen(&svga_driver, 0xFF272822);
         const struct nk_command *it = 0;
         nk_foreach(it, &ctx) {
@@ -1040,19 +1113,6 @@ void kernel_shell() {
                     svga_draw_rect(&svga_driver, rect->x, rect->y, rect->w, rect->h, c);
                 } break;
                 case NK_COMMAND_RECT_MULTI_COLOR:
-                // rect := cast(*nk_command_rect_multi_color) it;
-                // left := make_Color(nk_color_cf(rect.left));
-                // right := make_Color(nk_color_cf(rect.right));
-                // bottom := make_Color(nk_color_cf(rect.bottom));
-                // top := make_Color(nk_color_cf(rect.top));
-                
-                // // print("left: %\n", left);
-                // // print("right: %\n", right);
-                // // print("top: %\n", top);
-                // // print("bottom: %\n", bottom);
-                // // if bottom.r == 0 && bottom.g == 0 && bottom.b == 0 then assert(false);
-                
-                // draw_rect_multi_color(<<renderer, cast(float) rect.x, cast(float) rect.y, cast(float) rect.w, cast(float) rect.h, left, right, top, bottom);
                 
                 break;
                 case NK_COMMAND_RECT: {
@@ -1080,7 +1140,7 @@ void kernel_shell() {
                         s32 width = get_glyph_start_end(text->string[i], &start, &end);
                         
                         
-                        for (int line = 1; line < 8; ++line) {
+                        for (int line = 1; line < 16; ++line) {
                             svga_copy_line_to_fb(&svga_driver, (u8 *)&data[start + image_width * line], width, text->x + offset, text->y + line, 0xFF000000);
                         }
                         offset += width;
@@ -1097,29 +1157,11 @@ void kernel_shell() {
                     
                 } break;
                 case NK_COMMAND_LINE:
-                // line := cast(*nk_command_line) it;
-                // make_Vector2 :: (v: nk_vec2i) -> Vector2 {
-                //     return make_Vector2(cast(float) v.x, cast(float) v.y);
-                // }
-                // v1 := make_Vector2(line.begin);
-                // v2 := make_Vector2(line.end);
-                // c := nk_color_cf(line.color);
-                // draw_line(<<renderer, v1, v2, make_Color(c), cast(float) line.line_thickness);
-                
                 break;
+                
                 case NK_COMMAND_SCISSOR:
-                // sci := cast(*nk_command_scissor) it;
-                // v := make_Viewport(sci.x, sci.y, sci.w, sci.h);
-                // if sci.x == -8192 then
-                //     disable_scissor();
-                // else {
-                //     off := v.y + cast(s32) v.h;
-                //     if renderer.current_frame_buffer then v.y = cast(s32) renderer.current_frame_buffer.viewport.h - off;
-                //     else v.y = cast(s32) renderer.game.window.height - off;
-                
-                //     enable_scissor(v);
-                // }
                 break;
+                
                 default:
                 // kprint("cmd: %\n", it->type);
                 {}
@@ -1127,7 +1169,7 @@ void kernel_shell() {
         }
         nk_clear(&ctx);
         
-        svga_draw_circle(&svga_driver, 200, 100, 100, 0xFFFFFFFF);
+        //svga_draw_circle(&svga_driver, 200, 100, 100, 0xFFFFFFFF);
         
         svga_update_screen(&svga_driver);
         

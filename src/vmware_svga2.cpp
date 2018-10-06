@@ -179,7 +179,7 @@ void svga_draw_rect_outline(VMW_SVGA_Driver *svga, s32 x, s32 y, s32 width, s32 
         }
     }
     
-    svga_cmd_update_rect(svga, x0, y0, x1-x0, y1-y0);
+    // svga_cmd_update_rect(svga, x0, y0, x1-x0, y1-y0);
 }
 
 void svga_draw_rect(VMW_SVGA_Driver *svga, s32 x, s32 y, s32 width, s32 height, u32 color) {
@@ -211,7 +211,7 @@ void svga_draw_rect(VMW_SVGA_Driver *svga, s32 x, s32 y, s32 width, s32 height, 
         }
     }
     
-    svga_cmd_update_rect(svga, x0, y0, x1-x0, y1-y0);
+    // svga_cmd_update_rect(svga, x0, y0, x1-x0, y1-y0);
 }
 
 void svga_draw_circle(VMW_SVGA_Driver *svga, s32 x, s32 y, s32 radius, u32 color) {
@@ -248,7 +248,7 @@ void svga_draw_circle(VMW_SVGA_Driver *svga, s32 x, s32 y, s32 radius, u32 color
         }
     }
     
-    svga_cmd_update_rect(svga, x - radius, y0, radius*2, radius*2);
+    // svga_cmd_update_rect(svga, x - radius, y0, radius*2, radius*2);
     // for(;;) asm("hlt");
 }
 
