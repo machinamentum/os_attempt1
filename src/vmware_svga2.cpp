@@ -228,32 +228,27 @@ void svga_draw_circle(VMW_SVGA_Driver *svga, s32 x, s32 y, s32 radius, u32 color
     
     u32 offset = svga_read_reg(svga, SVGA_REG_FB_OFFSET);
     u32 *vram = reinterpret_cast<u32 *>(DRIVER_SAFE_USERLAND_VIRTUAL_ADDRESS + offset);
-    kprint("Start:\n");
-    int count = 01;
-    for (; start_y <= end_y; ++start_y) {
-        float64 inter = static_cast<float64>(start_y - y0) / static_cast<float64>(radius * 2);
-        inter = (inter * M_PI) + (M_PI / 2.0);
-        float64 xf = (cos(inter)) * static_cast<float64>(radius);
-        kprint("xf(%d) ", (s32)xf);
-        s32 x0 = static_cast<s32>(xf + x);
-        s32 x1 = static_cast<s32>(-xf + x);
-        // kprint("[%d, %d] ", x0, x1);
-        if (count == 4) {
-            kprint("\n");
-            count = 1;
-        }
-        count ++;
-        
-        if (x0 < 0) x0 = 0;
-        if (x1 > screen_width) x1 = screen_width;
-        
-        for (; x0 < x1; ++x0) {
-            vram[x0 + start_y * screen_width] = color;
+    
+    s32 x0 = x;
+    s32 x1 = x + radius*2;
+    
+    if (x0 < 0) x0 = 0;
+    if (x1 > screen_width) x1 = screen_width; // -1 ?
+    
+    for (; start_y < end_y; ++start_y) {
+        s32 start_x = x0;
+        s32 end_x = x1;
+        for (; start_x < end_x; ++start_x) {
+            s32 _x = start_x - (x + radius);
+            s32 _y = start_y - (y + radius);
+            
+            if ((_x*_x + _y*_y) <= (radius*radius)) {
+                vram[start_x + start_y * screen_width] = color;
+            }
         }
     }
-    kprint("END\n");
     
-    svga_cmd_update_rect(svga, x - radius, y0, radius, radius);
+    svga_cmd_update_rect(svga, x - radius, y0, radius*2, radius*2);
     // for(;;) asm("hlt");
 }
 

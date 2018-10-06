@@ -948,7 +948,7 @@ void kernel_shell() {
     struct nk_user_font font;
     
     font.userdata.ptr = nullptr;
-    font.height = 8;
+    font.height = 14;
     font.width = nuklear_font_width;
     
 #define NK_MEM (PAGE_SIZE * 64)
@@ -1126,6 +1126,8 @@ void kernel_shell() {
             }
         }
         nk_clear(&ctx);
+        
+        svga_draw_circle(&svga_driver, 200, 100, 100, 0xFFFFFFFF);
         
         svga_update_screen(&svga_driver);
         

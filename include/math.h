@@ -19,6 +19,12 @@ extern "C" {
     double fabs(double x);
     
     
+    float roundf(float x);
+    double round(double x);
+    long double roundl(long double x);
+    // @TODO there's many more rounding functions
+    
+    
 #define M_PI 3.14159265358979323846264338327950288
     
 #ifdef __cplusplus
