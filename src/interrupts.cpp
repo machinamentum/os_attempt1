@@ -49,17 +49,20 @@ void detach_irq_handler(s32 irq, void *dev) {
 }
 
 static void run_interrupt_handlers(s32 irq) {
+    u32 eflags = DISABLE_INTERRUPTS();
     kassert(irq >= 0 && irq <= 0x10);
     
     Array<IRQ_Receiver> *handlers = &irq_Receiver_table[irq];
     
     For (*handlers) {
         irq_result_type result = it.handler(irq, it.dev);
-        if (result == IRQ_RESULT_HANDLED) return;
+        if (result == IRQ_RESULT_HANDLED) break;
         if (result == IRQ_RESULT_CONTINUE) continue;
         
         // @TODO what should we do if the driver returns other codes?
     }
+    
+    RESTORE_INTERRUPTS(eflags);
 }
 
 __attribute__((interrupt))

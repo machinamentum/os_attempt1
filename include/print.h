@@ -39,7 +39,35 @@ void write_u32_decimal(u32 value, void *payload, putchar_callback putc_cb) {
     do {
         buffer[index++] = dec_values[value % 10];
         value /= 10;
+    } while (value > 0 && index < 11);
+    
+    for (int i = 10; i >= 0; --i) {
+        char c = buffer[i];
+        if (c == 0) continue;
+        putc_cb(payload, c);
+    }
+}
+
+void write_u32_frac_decimal(u32 frac, void *payload, putchar_callback putc_cb) {
+    char *dec_values = "0123456789";
+    char buffer[11];
+    zero_memory(&buffer, sizeof(buffer));
+    u8 index = 0;
+    
+    fixed32_32 value = frac;
+    
+    while (frac > 0 && index < 11) {
+        value = ((fixed32_32)frac) * 10;
+        frac *= 10;
+        
+        buffer[index++] = dec_values[value >> 32];
+    }
+    /*
+    do {
+        buffer[index++] = dec_values[value % 10];
+        value /= 10;
     } while (value > 0);
+    */
     
     for (int i = 10; i >= 0; --i) {
         char c = buffer[i];
@@ -114,6 +142,12 @@ void print_valist_callback(String fmt, va_list a_list, void *payload, putchar_ca
                 } else if (c == 'f') {
                     float64 value = va_arg(a_list, float64);
                     // write_float64(value, payload, putc_cb);
+                } else if (c == 'm') {
+                    u64 value = va_arg(a_list, u64);
+                    
+                    write_s32_decimal((value >> 32) & 0xFFFFFFFF, payload, putc_cb);
+                    putc_cb(payload, '.');
+                    write_u32_frac_decimal(value & 0xFFFFFFFF, payload, putc_cb);
                 } else {
                     // @TODO
                     putc_cb(payload, c);

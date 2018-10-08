@@ -16,6 +16,9 @@ typedef uint8_t  u8;
 typedef float float32;
 typedef double float64;
 
+// fixed point
+typedef u64 fixed32_32;
+
 #define PAGE_PRESENT           (1 << 0)
 #define PAGE_READ_WRITE        (1 << 1)
 #define PAGE_IS_NOT_PRIVILEGED (1 << 2) // 1; page is accesable to user land, otherwise only the kernel has access
@@ -29,45 +32,64 @@ typedef double float64;
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-void map_page_table(u32 *table, u32 virtual_addr);
-
-u32 next_free_page();
-
-u32 virtual_to_physical_address(u32 virtual_addr);
-
-void map_page(u32 physical, u32 virtual_addr, u32 flags);
-
-void unmap_page(u32 virtual_addr);
-
-void memcpy(void *dst, void *src, u32 num);
-
-void *zero_memory(void *dst, u32 size);
-
-s64 strlen(char *c_string);
-
-void kprint(char *s, ...);
-
-void kerror(char *s, ...);
-
-void _kassert(bool arg, char *s, char *file, u32 line);
-
+    
+    void map_page_table(u32 *table, u32 virtual_addr);
+    
+    u32 next_free_page();
+    
+    u32 virtual_to_physical_address(u32 virtual_addr);
+    
+    void map_page(u32 physical, u32 virtual_addr, u32 flags);
+    
+    void unmap_page(u32 virtual_addr);
+    
+    void memcpy(void *dst, void *src, u32 num);
+    
+    void *zero_memory(void *dst, u32 size);
+    
+    s64 strlen(char *c_string);
+    
+    void kprint(char *s, ...);
+    
+    void kerror(char *s, ...);
+    
+    void _kassert(bool arg, char *s, char *file, u32 line);
+    
 #define kassert(arg) _kassert((arg), #arg, __FILE__, __LINE__)
-
-void _port_io_write_u8(u16 port, u8 value);
-void _port_io_write_u16(u16 port, u16 value);
-void _port_io_write_u32(u16 port, u32 value);
-
-u8  _port_io_read_u8(u16 port);
-u32 _port_io_read_u32(u16 port);
-u16 _port_io_read_u16(u16 port);
-
-void _io_wait();
-
-void pic_set_eoi(u8 irq);
-
-u16 pic_get_isr();
-
+    
+    u32 _read_eflags();
+    u32 _write_eflags(u32 eflags);
+    
+#define DISABLE_INTERRUPTS() _read_eflags(); asm("cli")
+#define RESTORE_INTERRUPTS(flags) _write_eflags(flags)
+    
+    // @Cleanup fully rename these and all instances of their use
+    // these names are obsolute, use io_*
+    void _port_io_write_u8(u16 port, u8 value);
+    void _port_io_write_u16(u16 port, u16 value);
+    void _port_io_write_u32(u16 port, u32 value);
+    
+    u8  _port_io_read_u8(u16 port);
+    u32 _port_io_read_u32(u16 port);
+    u16 _port_io_read_u16(u16 port);
+    
+    void _io_wait();
+    
+#define io_write_u8  _port_io_write_u8
+#define io_write_u16 _port_io_write_u16
+#define io_write_u32 _port_io_write_32
+    
+#define io_read_u8  _port_io_read_u8
+#define io_read_u16 _port_io_read_u16
+#define io_read_u32 _port_io_read_32
+    
+#define io_wait _io_wait
+    
+    
+    void pic_set_eoi(u8 irq);
+    
+    u16 pic_get_isr();
+    
 #ifdef __cplusplus
 }
 #endif

@@ -692,6 +692,131 @@ void pci_enumerate_devices() {
     }
 }
 
+#define PIT_CHN0_DATA 0x40
+#define PIT_CHN1_DATA 0x41
+#define PIT_CHN2_DATA 0x42
+#define PIT_CMD       0x43
+
+#define PIT_CMD_SEL_CHN0 (0 << 6)
+#define PIT_CMD_SEL_CHN1 (1 << 6)
+#define PIT_CMD_SEL_CHN2 (2 << 6)
+#define PIT_CMD_READBACK (3 << 6)
+
+#define PIT_CMD_ACCESS_LATCH (0 << 4)
+#define PIT_CMD_ACCESS_LO    (1 << 4)
+#define PIT_CMD_ACCESS_HI    (2 << 4)
+#define PIT_CMD_ACCESS_LOHI  (3 << 4)
+
+#define PIT_CMD_OP_INT      (0 << 1)
+#define PIT_CMD_OP_ONE_SHOT (1 << 1)
+#define PIT_CMD_OP_RATE_GEN (2 << 1)
+#define PIT_CMD_OP_SQR_WAVE (3 << 1)
+#define PIT_CMD_OP_SW_STROBE (4 << 1)
+#define PIT_CMD_OP_HW_STROBE (5 << 1)
+
+#define PIT_CHANNEL0 0
+#define PIT_CHANNEL1 1
+#define PIT_CHANNEL2 2
+
+// same as Mode 2
+// #define PIT_CMD_OP_RATE_GEN2 (6 << 1)
+// same as Mode 3
+// #define PIT_CMD_OP_SQR_WAVE2 (7 << 1)
+
+#define PIT_CMD_BINARY16 (0 << 0)
+#define PIT_CMD_BCD      (1 << 0)
+
+#define PIT_MIN_FREQ    8 // Hz
+#define PIT_MAX_FREQ    1193181
+
+u16 pit_read_count(u8 channel) {
+    kassert(channel <= PIT_CHANNEL2);
+    
+    u32 eflags = DISABLE_INTERRUPTS();
+    
+    io_write_u8(PIT_CMD, channel << 6);
+    u8 lo = io_read_u8(PIT_CHN0_DATA + channel);
+    u8 hi = io_read_u8(PIT_CHN0_DATA + channel);
+    
+    u16 count = lo | (hi << 8);
+    
+    RESTORE_INTERRUPTS(eflags);
+    
+    return count;
+}
+
+void pit_set_reload_value(u8 channel, u16 value) {
+    u32 eflags = DISABLE_INTERRUPTS();
+    
+    io_write_u8(PIT_CHN0_DATA + channel, value & 0xFF);
+    io_write_u8(PIT_CHN0_DATA + channel, (value >> 8) & 0xFF);
+    
+    RESTORE_INTERRUPTS(eflags);
+}
+
+irq_result_type pit_irq_handler(s32 irq, void *dev);
+
+struct PIT_Data {
+    fixed32_32 system_timer_ms;
+    fixed32_32 irq0_step_ms;
+    u32 irq0_freq;
+    u16 pit_reload_value;
+    int once = 1;
+    
+    void init(u32 freq) {
+        u64 reload_value;
+        if (freq <= PIT_MIN_FREQ || freq >= PIT_MAX_FREQ) {
+            reload_value = 0x10000;
+        } else {
+            u64 value = PIT_MAX_FREQ / freq;
+            u32 rem = PIT_MAX_FREQ % freq;
+            
+            if (rem >= (PIT_MAX_FREQ / 2)) value++;
+            
+            
+            reload_value = value;
+        }
+        
+        pit_reload_value = (reload_value & 0xFFFF);
+        
+        fixed32_32 time_step_ms = ((reload_value * 3000) << 32) / 3579545;
+        irq0_step_ms = time_step_ms;
+        kprint("reload: %d\n", reload_value);
+        kprint("time step ms: %m\n", time_step_ms);
+        
+        u32 actual_freq = PIT_MAX_FREQ / reload_value;
+        
+        kprint("FREQ: %d\n", actual_freq);
+        irq0_freq = actual_freq;
+        
+        system_timer_ms = 0;
+        once = 1;
+        
+        u32 eflags = DISABLE_INTERRUPTS();
+        
+        io_write_u8(PIT_CMD, PIT_CMD_SEL_CHN0 | PIT_CMD_ACCESS_LOHI | PIT_CMD_OP_RATE_GEN);
+        pit_set_reload_value(PIT_CHANNEL0, pit_reload_value);
+        register_irq_handler(0, "PIT", pit_irq_handler, this);
+        clear_irq_mask(0);
+        
+        RESTORE_INTERRUPTS(eflags);
+        
+    }
+    
+} pit_data;
+
+irq_result_type pit_irq_handler(s32 irq, void *dev) {
+    PIT_Data *pit = reinterpret_cast<PIT_Data *>(dev);
+    
+    if (pit->once) {
+        pit->once = 0;
+        kprint("\n\nINTERRUTP: %m\n\n", pit->irq0_step_ms);
+    }
+    
+    pit->system_timer_ms += pit->irq0_step_ms;
+    return IRQ_RESULT_HANDLED;
+}
+
 void create_ide_driver(Pci_Device_Config *header);
 void create_svga_driver(Pci_Device_Config *header);
 
@@ -739,8 +864,6 @@ void kernel_main(Multiboot_Information *info) {
     
     // kprint("Image begins at phys: %X\n", virtual_to_physical_address((u32) image_data));
     // kprint("Image ends at phsy: %X\n", virtual_to_physical_address((u32)((&image_data[0]) + 24624)));
-    
-    // for (;;) asm("hlt");
     
     // kprint("Testing interrupt...");
     // kprint("done\n");
@@ -1009,13 +1132,25 @@ void kernel_shell() {
     
     //kprint("Testing kprint ! %d\n", 123456789);
     
+    pit_data.init(700);
+    
     // for (;;) asm("hlt");
     
     int counter = 20;
     
     while (true) {
+        // 1 second
+        asm("hlt");
+        u32 eflags = DISABLE_INTERRUPTS();
+        
+        if (pit_data.system_timer_ms < ((1000LL / 10LL) << 32)) {
+            RESTORE_INTERRUPTS(eflags);
+            continue;
+        }
+        
+        pit_data.system_timer_ms = 0;
+        
         nk_input_begin(&ctx);
-        asm("cli"); // @TODO IRQ synchronization primitive
         for (s64 i = 0; i < keyboard_event_queue.count; i++) {
             Input in = keyboard_event_queue[i];
             
@@ -1061,6 +1196,7 @@ void kernel_shell() {
         }
         nk_input_end(&ctx);
         
+        
         if (nk_begin_titled(&ctx, "_Terminal", "Terminal", nk_rect(50, 50, 500, 600),
                             NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_CLOSABLE|NK_WINDOW_SCALABLE|NK_WINDOW_MINIMIZABLE|NK_WINDOW_SCROLL_AUTO_HIDE|NK_WINDOW_NO_SCROLLBAR)) {
             
@@ -1099,11 +1235,11 @@ void kernel_shell() {
         
         // enable interrupts and clear the keyboard state at the end of the GUI update so we can
         // read from the input queue during GUI updates
-        // @FixMe this needs a lock around it, or we need to disable keyboard IRQs
-        asm("sti");
         keyboard_event_queue.clear();
+        RESTORE_INTERRUPTS(eflags);
         
-        svga_clear_screen(&svga_driver, 0xFF272822);
+        
+        // svga_clear_screen(&svga_driver, 0xFF272822);
         const struct nk_command *it = 0;
         nk_foreach(it, &ctx) {
             switch (it->type) {
@@ -1146,7 +1282,7 @@ void kernel_shell() {
                         offset += width;
                     }
                     
-                    svga_cmd_update_rect(&svga_driver, text->x, text->y, offset, 8);
+                    svga_cmd_update_rect(&svga_driver, text->x, text->y, offset, 16);
                 } break;
                 case NK_COMMAND_CIRCLE_FILLED: {
                     nk_command_circle_filled *circ = (nk_command_circle_filled *) it;
@@ -1172,8 +1308,6 @@ void kernel_shell() {
         //svga_draw_circle(&svga_driver, 200, 100, 100, 0xFFFFFFFF);
         
         svga_update_screen(&svga_driver);
-        
-        asm("hlt");
     }
 }
 

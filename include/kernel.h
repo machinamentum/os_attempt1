@@ -14,7 +14,7 @@
 
 #define UNUSED(x) do { (void)(x); } while (0)
 
-#define kNEW(type) (reinterpret_cast<type *>( zero_memory(heap_alloc(sizeof(type)), sizeof(type)) ))
+// #define kNEW(type) (reinterpret_cast<type *>( zero_memory(heap_alloc(sizeof(type)), sizeof(type)) ))
 
 #include "string.h"
 

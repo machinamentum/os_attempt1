@@ -98,22 +98,22 @@ void _heap_free(void *mem) {
 }
 
 void *heap_allocator(ALLOCATOR_MODE mode, void *existing, s64 size) {
-    asm("cli");
+    u32 eflags = DISABLE_INTERRUPTS();
     if (mode == ALLOCATOR_MODE_ALLOC) {
         kassert(existing == nullptr);
         auto result = _heap_alloc(size);
-        asm("sti");
+        RESTORE_INTERRUPTS(eflags);
         return result;
     } else if (mode == ALLOCATOR_MODE_FREE) {
         kassert(size == 0);
         kassert(existing);
         
         _heap_free(existing);
-        asm("sti");
+        RESTORE_INTERRUPTS(eflags);
         return nullptr;
     }
     
-    asm("sti");
+    RESTORE_INTERRUPTS(eflags);
     kassert(false && "mode is an invalid value");
     return nullptr;
 }

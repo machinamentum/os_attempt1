@@ -179,7 +179,7 @@ void svga_draw_rect_outline(VMW_SVGA_Driver *svga, s32 x, s32 y, s32 width, s32 
         }
     }
     
-    // svga_cmd_update_rect(svga, x0, y0, x1-x0, y1-y0);
+    svga_cmd_update_rect(svga, x0, y0, x1-x0, y1-y0);
 }
 
 void svga_draw_rect(VMW_SVGA_Driver *svga, s32 x, s32 y, s32 width, s32 height, u32 color) {
@@ -211,7 +211,7 @@ void svga_draw_rect(VMW_SVGA_Driver *svga, s32 x, s32 y, s32 width, s32 height, 
         }
     }
     
-    // svga_cmd_update_rect(svga, x0, y0, x1-x0, y1-y0);
+    svga_cmd_update_rect(svga, x0, y0, x1-x0, y1-y0);
 }
 
 void svga_draw_circle(VMW_SVGA_Driver *svga, s32 x, s32 y, s32 radius, u32 color) {
@@ -248,8 +248,7 @@ void svga_draw_circle(VMW_SVGA_Driver *svga, s32 x, s32 y, s32 radius, u32 color
         }
     }
     
-    // svga_cmd_update_rect(svga, x - radius, y0, radius*2, radius*2);
-    // for(;;) asm("hlt");
+    svga_cmd_update_rect(svga, x, y0, radius*2, radius*2);
 }
 
 void svga_copy_line_to_fb(VMW_SVGA_Driver *svga, u8 *buffer, s32 width_in_pixels, s32 x, s32 y, u32 filter_color) {
@@ -287,7 +286,7 @@ void svga_clear_screen(VMW_SVGA_Driver *svga, u32 color) {
 void svga_update_screen(VMW_SVGA_Driver *svga) {
     u32 screen_width = svga_read_reg(svga, SVGA_REG_WIDTH);
     u32 screen_height = svga_read_reg(svga, SVGA_REG_HEIGHT);
-    svga_cmd_update_rect(svga, 0, 0, screen_width, screen_height);
+    // svga_cmd_update_rect(svga, 0, 0, screen_width, screen_height);
 }
 
 void create_svga_driver(Pci_Device_Config *header) {

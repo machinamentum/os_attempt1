@@ -22,11 +22,11 @@ void spinlock_release(Spinlock *lock) {
 }
 
 #define PCI_IDE_COMPAT_PRIMARY_COMMAND_BLOCK_START 0x01F0
-#define PCI_IDE_COMPAT_PRIMARY_CONTROL_BLOCK_START 0x03F6
+#define PCI_IDE_COMPAT_PRIMARY_CONTROL_BLOCK_START 0x03F4
 #define PCI_IDE_COMPAT_PIMARY_IRQ 14
 
 #define PCI_IDE_COMPAT_SECONDARY_COMMAND_BLOCK_START 0x0170
-#define PCI_IDE_COMPAT_SECONDARY_CONTROL_BLOCK_START 0x0376
+#define PCI_IDE_COMPAT_SECONDARY_CONTROL_BLOCK_START 0x0374
 #define PCI_IDE_COMPAT_SECONDARY_IRQ 15
 
 #define PCI_IDE_PROG_IF_PRIMARY_MODE_BIT    (1 << 0)
@@ -45,8 +45,8 @@ void spinlock_release(Spinlock *lock) {
 #define PCI_IDE_STATUS_READ_REGISTER    7
 #define PCI_IDE_COMMAND_WRITE_REGISTER  7
 
-#define PCI_IDE_ALT_STATUS_READ_REGISTER      0
-#define PCI_IDE_DEVICE_CONTROL_WRITE_REGISTER 0
+#define PCI_IDE_ALT_STATUS_READ_REGISTER      0x2
+#define PCI_IDE_DEVICE_CONTROL_WRITE_REGISTER 0x2
 #define PCI_IDE_DRIVE_ADDRESS_READ_REGISTER   1
 
 #define PCI_IDE_STATUS_ERR_BIT  (1 << 0)
@@ -82,6 +82,15 @@ struct IDE_Driver {
     
     void flush_cache() {
         _port_io_write_u8(command_block + PCI_IDE_COMMAND_WRITE_REGISTER, 0xE7);
+    }
+    
+    void send_cmd_reset() {
+        // @Cleanup document these bits using #defines
+        io_write_u8(control_block + PCI_IDE_DEVICE_CONTROL_WRITE_REGISTER, (1 << 2));
+        //udelay(5);
+        
+        io_write_u8(control_block + PCI_IDE_DEVICE_CONTROL_WRITE_REGISTER, (1 << 1));
+        //mdelay(5);
     }
     
     u8 read_ctrl_u8(s8 reg) {
@@ -313,6 +322,8 @@ void setup_ide_driver(Pci_Device_Config *header, IDE_Driver *ide, u16 command_bl
     kassert(ide->selected_drive == 0xFF);
     
     // install irq handler
+    // @FixMe do this for both controller drivers
+    // if we have two controllers
     // register_irq_handler(14, "IDE Controller", ide_irq_handler, ide_primary_driver);
     
     ide->write_cmd_u8(PCI_IDE_DRIVE_HEAD_REGISTER, 0);

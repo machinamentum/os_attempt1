@@ -165,3 +165,17 @@ global _io_wait
 _io_wait:
 	out 0x80, al
 	ret
+
+global _read_eflags
+_read_eflags:
+	pushfd
+	pop eax
+	ret
+
+global _write_eflags
+_write_eflags:
+	mov eax, [esp+4]
+	push eax
+	popfd
+	ret
+
