@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <windows.h>
 
 #define HSF_IMPLEMENTATION
 #define HSF_ALLOC malloc
@@ -20,58 +21,96 @@ char *concatenate(const char *str0, const char *str1) {
 	return out;
 }
 
-void visitor_callback(hsf *HSF, const char *DirName, hsf_directory_entry *entry, void *UserPayload) {
-	printf("%s: FileName: %d:'%.*s'\n", DirName, entry->FileNameLength, entry->FileNameLength, &entry->FileName[0]);
+void visitor_callback(Hsf_Context *HSF, const char *DirName, Hsf_Directory_Entry *entry, void *UserPayload) {
+	if (entry->filename[0] == 0) return; // "."
+	if (entry->filename[0] == '\1') return; // ".."
+    if (entry->file_flags & HSF_FILE_FLAG_IS_DIR) {
+        printf("%s%.*s: <dir>\n", DirName, __hsf_get_filename_length(entry), &entry->filename[0]);
+    } else {
+        printf("%s%.*s: %u bytes\n", DirName, __hsf_get_filename_length(entry), &entry->filename[0], entry->data_length_le);
+    }
     
-	if (entry->FileName[0] == 0) return; // "."
-	if (entry->FileName[0] == '\1') return; // ".."
-    
-	if (entry->FileFlags & HSF_FILE_FLAG_IS_DIR) {
-		char *FileName = (char *)malloc(entry->FileNameLength+1);
-		memcpy(FileName, &entry->FileName[0], entry->FileNameLength);
-		FileName[entry->FileNameLength] = 0;
-		char *Dir = concatenate(DirName, FileName);
-		printf("Recursing: '%s'\n", Dir);
-		HsfVisitDirectory(HSF, Dir, visitor_callback, 0);
-        
-		free(FileName);
-		free(Dir);
-	}
+    /*
+ if (entry->file_flags & HSF_FILE_FLAG_IS_DIR) {
+  char *FileName = (char *)malloc(entry->filename_length+1);
+  memcpy(FileName, &entry->filename[0], entry->filename_length);
+  FileName[entry->filename_length] = 0;
+  char *Dir = concatenate(DirName, FileName);
+  printf("Recursing: '%s'\n", Dir);
+  hsf_visit_directory(HSF, Dir, visitor_callback, 0);
+  
+  free(FileName);
+  free(Dir);
+ }
+ */
 }
 
 int main(int argc, char **argv) {
-	if (argc < 2) {
-		printf("%s [ISO FILE] <FILE PATH IN ISO>\n", argv[0]);
+	if (argc < 3) {
+		printf("%s [command] [ISO FILE] <FILE PATH IN ISO>\n", argv[0]);
 		return 0;
 	}
     
-	hsf handle;
-	HsfOpen(&handle, argv[1]);
+    Hsf_Context ctx;
     
-	HsfVisitDirectory(&handle, "/", visitor_callback, 0);
+    if (strcmp(argv[1], "create") == 0) {
+        hsf_create_from_fopen(&ctx, argv[2]);
+        ctx.io_mode = HSF_IO_READ_WRITE;
+        hsf_format_image(&ctx, "Test Vol", 5120 /*10MB*/);
+        hsf_destruct_with_fclose(&ctx);
+    } else if (strcmp(argv[1], "ls") == 0) {
+        char *path;
+        if (argc < 4) {
+            path = "/";
+        } else {
+            path = argv[3];
+        }
+        hsf_create_from_fopen(&ctx, argv[2]);
+        if (!ctx.pvd) {
+            printf("Couldnt not open file: '%s'\n", argv[2]);
+            return -1;
+        }
+        hsf_visit_directory(&ctx, path, visitor_callback, 0);
+        hsf_destruct_with_fclose(&ctx);
+    } else if (strcmp(argv[1], "cat") == 0) {
+        if (argc < 4) return -1;
+        
+        hsf_create_from_fopen(&ctx, argv[2]);
+        if (!ctx.pvd) {
+            printf("Couldnt not open file: '%s'\n", argv[2]);
+            return -1;
+        }
+        
+        Hsf_File *file = hsf_file_open(&ctx, argv[3]);
+        
+        if (!file) {
+            printf("Couldnt open: %s\n", argv[2]);
+            return -1;
+        }
+        
+        hsf_file_seek(file, 0, HSF_SEEK_END);
+        u32 length = hsf_file_tell(file);
+        hsf_file_seek(file, 0, HSF_SEEK_SET);
+        
+        char *buffer = (char *)malloc(length+1);
+        
+        hsf_file_read(buffer, length, file);
+        buffer[length] = 0;
+        
+        printf("%s", buffer);
+        hsf_file_close(file);
+        hsf_destruct_with_fclose(&ctx);
+    }
     
-	if (argc >= 3) {
-		hsf_file *File = HsfFileOpen(&handle, argv[2]);
-        
-		if (!File) {
-			printf("Couldnt open: %s\n", argv[2]);
-			return -1;
-		} else {
-			printf("Found file: %s\n\n", argv[2]);
-		}
-        
-		HsfFileSeek(File, 0, HSF_SEEK_END);
-		u32 length = HsfFileTell(File);
-		HsfFileSeek(File, 0, HSF_SEEK_SET);
-        
-		char *buffer = (char *)malloc(length+1);
-        
-		HsfFileRead(buffer, length, File);
-		buffer[length] = 0;
-        
-		printf("CONTENTS:\n%s\n", buffer);
-	}
+    /*
     
-	HsfClose(&handle);
-	return 0;
+    HsfVisitDirectory(&handle, "/", visitor_callback, 0);
+    
+    if (argc >= 3) {
+    
+    }
+    */
+    
+    // HsfClose(&handle);
+    return 0;
 }
